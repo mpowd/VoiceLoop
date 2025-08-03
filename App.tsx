@@ -488,9 +488,9 @@ Text: "${inputText}"`;
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Universal Translator</Text>
+          <Text style={styles.headerTitle}>VoiceLoop</Text>
           <Text style={styles.headerSubtitle}>
-            Powered by Gemma-3 • Private & Offline
+            Powered by Gemma • Private & Offline
           </Text>
         </View>
         <View style={styles.languageIndicator}>
