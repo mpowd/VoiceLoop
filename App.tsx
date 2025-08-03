@@ -53,6 +53,8 @@ const LANGUAGES = [
 const App: React.FC = () => {
   const [inputText, setInputText] = useState<string>('');
   const [translatedText, setTranslatedText] = useState<string>('');
+  const [accumulatedTranslation, setAccumulatedTranslation] =
+    useState<string>(''); // NEU!
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isModelInitialized, setIsModelInitialized] = useState<boolean>(false);
   const [inputLanguage, setInputLanguage] = useState(LANGUAGES[0]); // English
@@ -89,38 +91,48 @@ const App: React.FC = () => {
           // Handle different response formats safely
           let translationText = '';
           if (typeof response === 'string') {
+            // Status messages during initialization
             translationText = response;
-          } else if (response && response.text) {
-            translationText = response.text;
-          } else if (response && response.message) {
-            translationText = response.message;
+            setTranslatedText(translationText);
+            setIsLoading(false);
+            return;
+          } else if (
+            response &&
+            (response.text !== undefined || response.message)
+          ) {
+            // Streaming translation responses
+            if (response.text !== undefined) {
+              translationText = response.text;
+            } else if (response.message) {
+              translationText = response.message;
+            }
+
+            if (!response.done && translationText) {
+              setAccumulatedTranslation(prev => {
+                const newAccumulated = prev + translationText;
+                setTranslatedText(newAccumulated);
+                console.log('Current accumulated:', newAccumulated);
+                return newAccumulated;
+              });
+            } else if (response.done) {
+              setAccumulatedTranslation(prev => {
+                const finalText = prev + translationText;
+                setTranslatedText(finalText.trim());
+                console.log('Final translation:', finalText.trim());
+                setIsLoading(false);
+                Vibration.vibrate(50);
+                return '';
+              });
+            }
           } else {
             translationText = 'Translation received but format unknown';
-          }
-
-          // Clean up the translation
-          translationText = translationText
-            .replace(/^Translation:\s*/i, '')
-            .replace(/^Translated text:\s*/i, '')
-            .replace(/^Output:\s*/i, '')
-            .replace(/\n+$/, '') // Remove trailing newlines
-            .trim();
-
-          console.log('Final cleaned translation:', translationText);
-          setTranslatedText(translationText);
-
-          // Check if done
-          const isDone =
-            (response && response.done) || typeof response === 'string';
-          console.log('Is done?', isDone);
-
-          if (isDone) {
+            setTranslatedText(translationText);
             setIsLoading(false);
-            Vibration.vibrate(50);
           }
         } catch (error) {
           console.error('Error processing response:', error);
           setTranslatedText('Error processing translation');
+          setAccumulatedTranslation('');
           setIsLoading(false);
         }
       },
@@ -131,6 +143,7 @@ const App: React.FC = () => {
       console.error('Error:', error);
       setIsLoading(false);
       setTranslatedText(`❌ Error: ${error}`);
+      setAccumulatedTranslation('');
       Alert.alert('Translation Error', String(error));
     });
 
@@ -221,7 +234,7 @@ const App: React.FC = () => {
       const recognizedText = e.value[0];
       setInputText(recognizedText); // Set the recognized text as input
       setPartialSpeechText('');
-      Vibration.vibrate(50); // Feedback für erfolgreiche Erkennung
+      Vibration.vibrate(50);
     }
   };
 
@@ -533,34 +546,28 @@ const App: React.FC = () => {
 
     try {
       console.log('=== TRANSLATION START ===');
-      console.log(
-        `Translating from ${inputLanguage.name} to ${outputLanguage.name}`,
-      );
-      console.log(`Input text: "${inputText}"`);
 
       setIsLoading(true);
       setTranslatedText('🔄 Translating...');
 
+      setAccumulatedTranslation('');
+
       const translationPrompt = `Translate the following text from ${inputLanguage.name} to ${outputLanguage.name}.
 
-Important: Only provide the translated text, nothing else. No explanations, no "Translation:" prefix, no additional commentary.
+  Important: Only provide the translated text, nothing else. No explanations, no "Translation:" prefix, no additional commentary.
 
-Text: "${inputText}"`;
+  Text: "${inputText}"`;
 
       console.log('Sending prompt to LLM...');
-      console.log('Prompt:', translationPrompt);
-
-      // Use async generation
       GemmaLLM.generateResponseAsync(translationPrompt);
     } catch (error) {
       console.error('=== TRANSLATION ERROR ===');
-      console.error('Error:', error);
       setIsLoading(false);
       setTranslatedText(`❌ Translation failed: ${error}`);
+      setAccumulatedTranslation('');
       Alert.alert('Translation Error', `Failed to translate: ${error}`);
     }
   };
-
   const swapLanguages = (): void => {
     const temp = inputLanguage;
     setInputLanguage(outputLanguage);
@@ -584,10 +591,10 @@ Text: "${inputText}"`;
   const clearAll = (): void => {
     setInputText('');
     setTranslatedText('');
+    setAccumulatedTranslation(''); // Reset accumulated text
     setPartialSpeechText('');
-    stopSpeaking(); // Stop any current speech
+    stopSpeaking();
   };
-
   const selectInputLanguage = (language: (typeof LANGUAGES)[0]) => {
     setInputLanguage(language);
     setShowInputLanguageModal(false);

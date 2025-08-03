@@ -5,209 +5,270 @@ import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import java.io.File
+import kotlinx.coroutines.*
 
 class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     
     private var llmInference: LlmInference? = null
+    private var llmSession: LlmInferenceSession? = null
     private val TAG = "GemmaLLM"
-    private val modelPath = "/data/local/tmp/llm/model_version.task"
+    private val modelPath = "/data/local/tmp/llm/gemma3n.task"
     
-    private val MAX_MODEL_SIZE_MB = 1000L
-    private val RECOMMENDED_MODEL_SIZE_MB = 600L
+    private val moduleScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     
     override fun getName(): String = "GemmaLLM"
     
     @ReactMethod
     fun checkModelAvailability(promise: Promise) {
-        Log.i(TAG, "Checking model availability...")
+        Log.i(TAG, "Checking model availability at: $modelPath")
         
-        val modelFile = File(modelPath)
-        val sizeMB = if (modelFile.exists()) modelFile.length() / 1024 / 1024 else 0
-        
-        val result = Arguments.createMap().apply {
-            putString("modelPath", modelPath)
-            putBoolean("exists", modelFile.exists())
-            putBoolean("readable", modelFile.canRead())
-            putDouble("sizeMB", sizeMB.toDouble())
-            putInt("availableCount", if (modelFile.exists() && modelFile.canRead()) 1 else 0)
+        try {
+            val modelFile = File(modelPath)
+            val sizeMB = if (modelFile.exists()) modelFile.length() / 1024 / 1024 else 0
             
-            if (sizeMB > MAX_MODEL_SIZE_MB) {
-                putString("warning", "⚠️ Model too large! ${sizeMB}MB > ${MAX_MODEL_SIZE_MB}MB. App may crash!")
-                putBoolean("tooLarge", true)
-            } else if (sizeMB > RECOMMENDED_MODEL_SIZE_MB) {
-                putString("warning", "⚠️ Model large (${sizeMB}MB). Recommended: <${RECOMMENDED_MODEL_SIZE_MB}MB")
-                putBoolean("tooLarge", false)
-            } else {
-                putString("warning", "✅ Model size OK (${sizeMB}MB)")
-                putBoolean("tooLarge", false)
+            val runtime = Runtime.getRuntime()
+            val maxMemoryMB = runtime.maxMemory() / 1024 / 1024
+            val freeMemoryMB = runtime.freeMemory() / 1024 / 1024
+            
+            val result = Arguments.createMap().apply {
+                putString("modelPath", modelPath)
+                putBoolean("exists", modelFile.exists())
+                putBoolean("readable", modelFile.canRead())
+                putDouble("sizeMB", sizeMB.toDouble())
+                putInt("availableCount", if (modelFile.exists() && modelFile.canRead()) 1 else 0)
+                
+                putDouble("maxMemoryMB", maxMemoryMB.toDouble())
+                putDouble("freeMemoryMB", freeMemoryMB.toDouble())
+                
+                putBoolean("canLoad", modelFile.exists() && freeMemoryMB > sizeMB * 0.3)
+                putString("modelType", if (sizeMB > 2000) "Large Model (3B+)" else "Standard Model")
             }
+            
+            Log.i(TAG, "Model check: exists=${modelFile.exists()}, size=${sizeMB}MB")
+            promise.resolve(result)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking model", e)
+            promise.reject("CHECK_ERROR", "Failed to check: ${e.message}", e)
         }
-        
-        Log.i(TAG, "Model: exists=${modelFile.exists()}, size=${sizeMB}MB")
-        promise.resolve(result)
     }
     
     @ReactMethod
     fun initializeModel(promise: Promise) {
-        try {
-            Log.i(TAG, "Starting model initialization...")
-            
-            val modelFile = File(modelPath)
-            if (!modelFile.exists()) {
-                promise.reject("NO_MODEL", "Model not found at $modelPath")
-                return
+        Log.i(TAG, "=== GOOGLE-STYLE ASYNC MODEL INITIALIZATION ===")
+        
+        moduleScope.launch {
+            try {
+                // Send progress updates
+                withContext(Dispatchers.Main) {
+                    sendEvent("llmResponse", "🔍 Checking large model file...")
+                }
+                
+                val modelFile = File(modelPath)
+                if (!modelFile.exists()) {
+                    withContext(Dispatchers.Main) {
+                        promise.reject("NO_MODEL", "Model not found at $modelPath")
+                    }
+                    return@launch
+                }
+                
+                val sizeMB = modelFile.length() / 1024 / 1024
+                Log.i(TAG, "Large model file: ${sizeMB}MB")
+                
+                withContext(Dispatchers.Main) {
+                    sendEvent("llmResponse", "📦 Large model detected: ${sizeMB}MB")
+                }
+                
+                // Memory cleanup before loading
+                withContext(Dispatchers.Main) {
+                    sendEvent("llmResponse", "🧹 Preparing memory...")
+                }
+                
+                // Force GC like Google project
+                System.gc()
+                delay(500) // Give GC time
+                System.gc()
+                
+                withContext(Dispatchers.Main) {
+                    sendEvent("llmResponse", "⚙️ Configuring model options...")
+                }
+                
+                val options = LlmInferenceOptions.builder()
+                    .setModelPath(modelPath)
+                    .setMaxTokens(256)
+                    .setPreferredBackend(LlmInference.Backend.GPU)
+                    .build()
+                
+                withContext(Dispatchers.Main) {
+                    sendEvent("llmResponse", "🚀 Loading large model... (30-60 seconds)")
+                }
+                
+                Log.i(TAG, "Creating LlmInference engine...")
+                val startTime = System.currentTimeMillis()
+                
+                llmInference = withContext(Dispatchers.IO) {
+                    LlmInference.createFromOptions(reactApplicationContext, options)
+                }
+                
+                Log.i(TAG, "Creating LlmInferenceSession...")
+                
+                llmSession = LlmInferenceSession.createFromOptions(
+                    llmInference!!,
+                    LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                        .setTopK(20)
+                        .setTopP(0.8f)
+                        .setTemperature(0.8f)
+                        .build()
+                )
+                
+                val initTime = System.currentTimeMillis() - startTime
+                
+                Log.i(TAG, "✅ Large model initialized successfully in ${initTime}ms")
+                
+                val result = Arguments.createMap().apply {
+                    putString("modelPath", modelPath)
+                    putDouble("modelSizeMB", sizeMB.toDouble())
+                    putDouble("initTimeMs", initTime.toDouble())
+                    putString("status", "Large model initialized successfully")
+                    putString("architecture", "Google-style async loading")
+                }
+                
+                withContext(Dispatchers.Main) {
+                    promise.resolve(result)
+                }
+                
+            } catch (e: OutOfMemoryError) {
+                Log.e(TAG, "❌ OOM during large model loading", e)
+                
+                // Cleanup on failure
+                try {
+                    llmSession?.close()
+                    llmInference?.close()
+                    llmSession = null
+                    llmInference = null
+                    System.gc()
+                } catch (cleanupError: Exception) {
+                    Log.e(TAG, "Cleanup error", cleanupError)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    promise.reject("OUT_OF_MEMORY", 
+                        "Out of memory loading ${File(modelPath).length() / 1024 / 1024}MB model! " +
+                        "Close other apps and restart device.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Large model initialization failed", e)
+                
+                withContext(Dispatchers.Main) {
+                    promise.reject("INIT_ERROR", "Google-style init failed: ${e.message}", e)
+                }
             }
-            
-            val sizeMB = modelFile.length() / 1024 / 1024
-            Log.i(TAG, "Model file found: ${sizeMB}MB")
-            
-            if (sizeMB > MAX_MODEL_SIZE_MB) {
-                promise.reject("MODEL_TOO_LARGE", 
-                    "Model too large: ${sizeMB}MB > ${MAX_MODEL_SIZE_MB}MB. " +
-                    "Please use Gemma-3 1B (~529MB) instead of larger models.")
-                return
-            }
-            
-            if (sizeMB > RECOMMENDED_MODEL_SIZE_MB) {
-                Log.w(TAG, "⚠️ Large model detected: ${sizeMB}MB. This may cause performance issues.")
-            }
-            
-            val options = LlmInferenceOptions.builder()
-                .setModelPath(modelPath)
-                .setMaxTopK(40)
-                .setMaxTokens(512)
-                .build()
-            
-            Log.i(TAG, "Creating LlmInference instance...")
-            
-            val startTime = System.currentTimeMillis()
-            llmInference = LlmInference.createFromOptions(reactApplicationContext, options)
-            val initTime = System.currentTimeMillis() - startTime
-            
-            Log.i(TAG, "✅ Model initialized successfully in ${initTime}ms")
-            
-            val result = Arguments.createMap().apply {
-                putString("modelPath", modelPath)
-                putDouble("modelSizeMB", sizeMB.toDouble())
-                putDouble("initTimeMs", initTime.toDouble())
-                putString("status", "Model initialized successfully")
-                putString("recommendation", if (sizeMB > RECOMMENDED_MODEL_SIZE_MB) 
-                    "Consider using smaller model for better performance" else 
-                    "Model size optimal for mobile")
-            }
-            
-            promise.resolve(result)
-            
-        } catch (e: OutOfMemoryError) {
-            Log.e(TAG, "❌ Out of memory during model initialization", e)
-            promise.reject("OUT_OF_MEMORY", 
-                "Out of memory! Model too large for device. Use Gemma-3 1B (~529MB) instead.")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to initialize model", e)
-            promise.reject("INIT_ERROR", "Failed to initialize: ${e.message}", e)
         }
     }
     
     @ReactMethod
     fun generateResponse(prompt: String, promise: Promise) {
-        try {
-            if (llmInference == null) {
-                promise.reject("NOT_INITIALIZED", "Model not initialized")
-                return
+        if (llmSession == null) {
+            promise.reject("NOT_INITIALIZED", "Model session not initialized")
+            return
+        }
+        
+        moduleScope.launch {
+            try {
+                Log.i(TAG, "Google-style async generation...")
+                
+                val startTime = System.currentTimeMillis()
+                
+                withContext(Dispatchers.IO) {
+                    llmSession!!.addQueryChunk(prompt)
+                    val result = llmSession!!.generateResponse()
+                    
+                    val genTime = System.currentTimeMillis() - startTime
+                    Log.i(TAG, "✅ Generated in ${genTime}ms")
+                    
+                    withContext(Dispatchers.Main) {
+                        promise.resolve(result)
+                    }
+                }
+                
+            } catch (e: OutOfMemoryError) {
+                Log.e(TAG, "OOM during generation", e)
+                withContext(Dispatchers.Main) {
+                    promise.reject("OUT_OF_MEMORY", "Generation OOM")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Generation failed", e)
+                withContext(Dispatchers.Main) {
+                    promise.reject("GENERATION_ERROR", "Failed: ${e.message}", e)
+                }
             }
-            
-            Log.i(TAG, "Generating response (${prompt.length} chars)...")
-            
-            val startTime = System.currentTimeMillis()
-            val result = llmInference!!.generateResponse(prompt)
-            val genTime = System.currentTimeMillis() - startTime
-            
-            Log.i(TAG, "✅ Response generated in ${genTime}ms (${result.length} chars)")
-            promise.resolve(result)
-            
-        } catch (e: OutOfMemoryError) {
-            Log.e(TAG, "❌ Out of memory during generation", e)
-            promise.reject("OUT_OF_MEMORY", "Out of memory during generation. Try shorter prompt.")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to generate response", e)
-            promise.reject("GENERATION_ERROR", "Failed to generate: ${e.message}", e)
         }
     }
     
     @ReactMethod 
     fun generateResponseAsync(prompt: String) {
-        try {
-            if (llmInference == null) {
-                sendEvent("llmError", "Model not initialized")
-                return
-            }
-            
-            Log.i(TAG, "Starting async generation...")
-            
-            Thread {
-                try {
-                    val result = llmInference!!.generateResponse(prompt)
+        if (llmSession == null) {
+            sendEvent("llmError", "Model session not initialized")
+            return
+        }
+        
+        Log.i(TAG, "Starting Google-style async streaming generation...")
+        
+        moduleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    llmSession!!.addQueryChunk(prompt)
                     
-                    val params = Arguments.createMap().apply {
-                        putString("text", result)
-                        putBoolean("done", true)
+                    llmSession!!.generateResponseAsync { partialResult, done ->
+                        Log.d(TAG, "Partial result: done=$done, length=${partialResult.length}")
+                        
+                        val params = Arguments.createMap().apply {
+                            putString("text", partialResult)
+                            putBoolean("done", done)
+                        }
+                        sendEvent("llmResponse", params)
                     }
-                    sendEvent("llmResponse", params)
-                    
-                } catch (e: OutOfMemoryError) {
-                    Log.e(TAG, "OOM in async generation", e)
-                    sendEvent("llmError", "Out of memory. Try shorter prompt.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in async generation", e)
-                    sendEvent("llmError", "Generation failed: ${e.message}")
                 }
-            }.start()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start async generation", e)
-            sendEvent("llmError", "Async generation failed: ${e.message}")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Async generation failed", e)
+                sendEvent("llmError", "Async generation failed: ${e.message}")
+            }
         }
     }
     
     @ReactMethod
-    fun getSetupInstructions(promise: Promise) {
-        val instructions = """
-            📱 Korrektes Gemma-3 Setup:
+    fun cleanup(promise: Promise) {
+        try {
+            Log.i(TAG, "Google-style cleanup...")
             
-            ❌ Problem: Aktuelles Model ist 3GB (zu groß!)
-            ✅ Lösung: Gemma-3 1B verwenden (~529MB)
+            // Cancel coroutines
+            moduleScope.coroutineContext.cancelChildren()
             
-            1️⃣ Richtiges Model herunterladen:
-               https://huggingface.co/litert-community/Gemma3-1B-IT
-               (Dateigröße sollte ~529MB sein, nicht 3GB!)
+            llmSession?.close()
+            llmSession = null
             
-            2️⃣ Aktuelles Model entfernen:
-               adb shell rm -r /data/local/tmp/llm/
-               adb shell mkdir -p /data/local/tmp/llm/
+            llmInference?.close()
+            llmInference = null
             
-            3️⃣ Richtiges Model pushen:
-               adb push gemma3_1b.task $modelPath
+            System.gc()
             
-            4️⃣ Größe verifizieren:
-               adb shell ls -lh /data/local/tmp/llm/
-               (sollte ~529MB zeigen)
-            
-            💡 Empfehlung: 
-               - Verwenden Sie IMMER Gemma-3 1B für mobile Apps
-               - Größere Models (2B+) sind für Server gedacht
-               - 529MB ist optimal für Android-Geräte
-        """.trimIndent()
-        
-        promise.resolve(instructions)
+            Log.i(TAG, "✅ Google-style cleanup completed")
+            promise.resolve("Cleaned up successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup failed", e)
+            promise.reject("CLEANUP_ERROR", "Cleanup failed: ${e.message}", e)
+        }
     }
     
     @ReactMethod
     fun getMemoryInfo(promise: Promise) {
         val runtime = Runtime.getRuntime()
-        val maxMemory = runtime.maxMemory() / 1024 / 1024  // MB
-        val totalMemory = runtime.totalMemory() / 1024 / 1024  // MB
-        val freeMemory = runtime.freeMemory() / 1024 / 1024  // MB
+        val maxMemory = runtime.maxMemory() / 1024 / 1024
+        val totalMemory = runtime.totalMemory() / 1024 / 1024
+        val freeMemory = runtime.freeMemory() / 1024 / 1024
         val usedMemory = totalMemory - freeMemory
         
         val result = Arguments.createMap().apply {
@@ -218,29 +279,24 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             putDouble("memoryUsagePercent", (usedMemory.toDouble() / maxMemory.toDouble()) * 100)
         }
         
-        Log.i(TAG, "Memory: ${usedMemory}MB used / ${maxMemory}MB max (${((usedMemory.toDouble()/maxMemory.toDouble())*100).toInt()}%)")
+        Log.i(TAG, "Memory: ${usedMemory}MB used / ${maxMemory}MB max")
         promise.resolve(result)
-    }
-    
-    @ReactMethod
-    fun cleanup(promise: Promise) {
-        try {
-            llmInference?.close()
-            llmInference = null
-            
-            System.gc()
-            
-            Log.i(TAG, "✅ Model cleaned up and memory freed")
-            promise.resolve("Cleaned up successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to cleanup", e)
-            promise.reject("CLEANUP_ERROR", "Cleanup failed: ${e.message}", e)
-        }
     }
     
     private fun sendEvent(eventName: String, data: Any?) {
         reactApplicationContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit(eventName, data)
+    }
+    
+    override fun onCatalystInstanceDestroy() {
+        super.onCatalystInstanceDestroy()
+        moduleScope.cancel()
+        try {
+            llmSession?.close()
+            llmInference?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in destroy", e)
+        }
     }
 }
