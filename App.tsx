@@ -13,8 +13,11 @@ import {
   NativeEventEmitter,
   Vibration,
   Modal,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import Tts from 'react-native-tts';
+import Voice from '@react-native-voice/voice';
 
 const { GemmaLLM } = NativeModules;
 
@@ -64,6 +67,12 @@ const App: React.FC = () => {
   const [isSpeakingInput, setIsSpeakingInput] = useState<boolean>(false);
   const [isSpeakingOutput, setIsSpeakingOutput] = useState<boolean>(false);
   const [availableVoices, setAvailableVoices] = useState<any[]>([]);
+
+  // STT States
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [hasVoicePermission, setHasVoicePermission] = useState<boolean>(false);
+  const [isVoiceAvailable, setIsVoiceAvailable] = useState<boolean>(false);
+  const [partialSpeechText, setPartialSpeechText] = useState<string>('');
 
   useEffect(() => {
     console.log('Setting up event listeners...');
@@ -125,19 +134,190 @@ const App: React.FC = () => {
       Alert.alert('Translation Error', String(error));
     });
 
-    // Initialize model and TTS
-    console.log('Starting model initialization...');
+    // Initialize model, TTS, and Voice
+    console.log('Starting initialization...');
     initializeModel();
     initializeTts();
+    initializeVoice();
+    requestVoicePermission();
 
     return () => {
       console.log('Cleaning up event listeners...');
       responseListener.remove();
       errorListener.remove();
       cleanupTts();
+      cleanupVoice();
     };
   }, []);
 
+  // === VOICE RECOGNITION FUNCTIONS ===
+  const initializeVoice = () => {
+    try {
+      // Voice Event Handlers
+      Voice.onSpeechStart = onSpeechStart;
+      Voice.onSpeechEnd = onSpeechEnd;
+      Voice.onSpeechResults = onSpeechResults;
+      Voice.onSpeechError = onSpeechError;
+      Voice.onSpeechPartialResults = onSpeechPartialResults;
+
+      // Check if voice is available
+      Voice.isAvailable()
+        .then(available => {
+          setIsVoiceAvailable(available);
+          console.log('Voice available:', available);
+        })
+        .catch(error => {
+          console.error('Voice availability check failed:', error);
+          setIsVoiceAvailable(false);
+        });
+    } catch (error) {
+      console.error('Voice initialization failed:', error);
+      setIsVoiceAvailable(false);
+    }
+  };
+
+  const cleanupVoice = () => {
+    Voice.destroy().then(Voice.removeAllListeners).catch(console.error);
+  };
+
+  const requestVoicePermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Mikrofon Berechtigung',
+            message:
+              'Diese App benötigt Zugriff auf das Mikrofon für Spracherkennung.',
+            buttonPositive: 'OK',
+          },
+        );
+        setHasVoicePermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+      } catch (err) {
+        console.warn('Voice permission error:', err);
+        setHasVoicePermission(false);
+      }
+    } else {
+      setHasVoicePermission(true);
+    }
+  };
+
+  // Voice Event Handlers
+  const onSpeechStart = (e: any) => {
+    console.log('Speech started', e);
+    setIsRecording(true);
+    setPartialSpeechText('');
+  };
+
+  const onSpeechEnd = (e: any) => {
+    console.log('Speech ended', e);
+    setIsRecording(false);
+    setPartialSpeechText('');
+  };
+
+  const onSpeechResults = (e: any) => {
+    console.log('Speech results', e);
+    if (e.value && e.value.length > 0) {
+      const recognizedText = e.value[0];
+      setInputText(recognizedText); // Set the recognized text as input
+      setPartialSpeechText('');
+      Vibration.vibrate(50); // Feedback für erfolgreiche Erkennung
+    }
+  };
+
+  const onSpeechPartialResults = (e: any) => {
+    console.log('Partial speech results', e);
+    if (e.value && e.value.length > 0) {
+      setPartialSpeechText(e.value[0]);
+    }
+  };
+
+  const onSpeechError = (e: any) => {
+    console.error('Speech error', e);
+    setIsRecording(false);
+    setPartialSpeechText('');
+
+    // Handle different error types silently for better UX
+    switch (e.error?.code) {
+      case '5':
+        console.log('Client-side error - already started');
+        break;
+      case '6':
+        Alert.alert('Fehler', 'Keine Berechtigung für Mikrofon');
+        break;
+      case '8':
+        Alert.alert('Fehler', 'Audio-Aufnahme fehlgeschlagen');
+        break;
+      default:
+        if (
+          e.error?.message &&
+          !e.error.message.includes('5/Client side error')
+        ) {
+          console.log('Speech error:', e.error?.message);
+        }
+    }
+  };
+
+  const startVoiceRecognition = async () => {
+    if (!hasVoicePermission) {
+      Alert.alert('Keine Berechtigung', 'Mikrofon-Zugriff erforderlich');
+      return;
+    }
+
+    if (!isVoiceAvailable) {
+      Alert.alert('Nicht verfügbar', 'Spracherkennung ist nicht verfügbar');
+      return;
+    }
+
+    if (isRecording) {
+      console.log('Already recording, ignoring start request');
+      return;
+    }
+
+    try {
+      setPartialSpeechText('');
+      // Use the input language for speech recognition
+      const voiceLanguage = getVoiceLanguageCode(inputLanguage.code);
+      await Voice.start(voiceLanguage);
+    } catch (error) {
+      console.error('Error starting voice recognition:', error);
+      setIsRecording(false);
+    }
+  };
+
+  const stopVoiceRecognition = async () => {
+    if (!isRecording) {
+      return;
+    }
+
+    try {
+      await Voice.stop();
+    } catch (error) {
+      console.error('Error stopping voice recognition:', error);
+    }
+  };
+
+  // Convert language codes to voice recognition format
+  const getVoiceLanguageCode = (languageCode: string): string => {
+    const voiceLanguageMappings: { [key: string]: string } = {
+      en: 'en-US',
+      de: 'de-DE',
+      es: 'es-ES',
+      fr: 'fr-FR',
+      it: 'it-IT',
+      pt: 'pt-BR',
+      ru: 'ru-RU',
+      ja: 'ja-JP',
+      ko: 'ko-KR',
+      zh: 'zh-CN',
+      hi: 'hi-IN',
+      ar: 'ar-SA',
+      tr: 'tr-TR',
+    };
+    return voiceLanguageMappings[languageCode] || 'en-US';
+  };
+
+  // === EXISTING TTS AND TRANSLATION FUNCTIONS ===
   const initializeTts = async (): Promise<void> => {
     try {
       console.log('=== TTS INITIALIZATION START ===');
@@ -225,7 +405,7 @@ const App: React.FC = () => {
 
     // Clean text for TTS (remove emojis and special characters)
     const cleanText = text
-      .replace(/[🔍🤖✅❌🔄🌐🗑️]/g, '')
+      .replace(/[🔍🤖✅❌🔄🌐🗑️🎤]/g, '')
       .replace(/Engine:\s*Gemma-3[\s\S]*?translate\.\.\./i, 'Translation ready')
       .trim();
 
@@ -328,7 +508,7 @@ const App: React.FC = () => {
       setTranslatedText(
         `✅ Translation ready!\n\n🌐 Engine: Gemma-3\n📦 Size: ${result.modelSizeMB.toFixed(
           1,
-        )} MB\n\nSelect languages and type something to translate...`,
+        )} MB\n\nSelect languages and type or speak something to translate...`,
       );
     } catch (error) {
       console.error('=== MODEL INITIALIZATION ERROR ===');
@@ -342,7 +522,7 @@ const App: React.FC = () => {
 
   const translateText = async (): Promise<void> => {
     if (!inputText.trim()) {
-      Alert.alert('Notice', 'Please enter text to translate!');
+      Alert.alert('Notice', 'Please enter or speak text to translate!');
       return;
     }
 
@@ -404,6 +584,7 @@ Text: "${inputText}"`;
   const clearAll = (): void => {
     setInputText('');
     setTranslatedText('');
+    setPartialSpeechText('');
     stopSpeaking(); // Stop any current speech
   };
 
@@ -490,7 +671,7 @@ Text: "${inputText}"`;
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>VoiceLoop</Text>
           <Text style={styles.headerSubtitle}>
-            Powered by Gemma • Private & Offline
+            Powered by Gemma • Private & Offline • Voice Enabled
           </Text>
         </View>
         <View style={styles.languageIndicator}>
@@ -540,12 +721,37 @@ Text: "${inputText}"`;
             </TouchableOpacity>
           </View>
 
-          {/* Input Section */}
+          {/* Input Section with Voice Recognition */}
           <View style={styles.inputSection}>
             <View style={styles.inputHeader}>
               <Text style={styles.sectionTitle}>Enter Text</Text>
               <View style={styles.inputHeaderRight}>
                 <Text style={styles.charCount}>{inputText.length}/500</Text>
+
+                {/* Voice Recognition Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.voiceButton,
+                    isRecording && styles.voiceButtonActive,
+                    (!hasVoicePermission || !isVoiceAvailable) &&
+                      styles.voiceButtonDisabled,
+                  ]}
+                  onPressIn={startVoiceRecognition}
+                  onPressOut={stopVoiceRecognition}
+                  disabled={
+                    !hasVoicePermission || !isVoiceAvailable || isLoading
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.voiceIcon,
+                      isRecording && styles.voiceIconActive,
+                    ]}
+                  >
+                    {isRecording ? '🎤' : '🎙️'}
+                  </Text>
+                </TouchableOpacity>
+
                 {/* Input Text Speaker Button */}
                 <TouchableOpacity
                   style={[
@@ -568,9 +774,20 @@ Text: "${inputText}"`;
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Live Speech Recognition Feedback */}
+            {(isRecording || partialSpeechText) && (
+              <View style={styles.speechFeedback}>
+                <Text style={styles.speechFeedbackText}>
+                  {isRecording ? '🎤 Listening...' : ''}
+                  {partialSpeechText ? ` "${partialSpeechText}"` : ''}
+                </Text>
+              </View>
+            )}
+
             <TextInput
               style={styles.textInput}
-              placeholder={`Type in ${inputLanguage.name}...`}
+              placeholder={`Type or speak in ${inputLanguage.name}...`}
               placeholderTextColor="#666"
               multiline={true}
               maxLength={500}
@@ -714,6 +931,25 @@ Text: "${inputText}"`;
             />
             <Text style={styles.modelStatusText}>
               {isTtsInitialized ? 'TTS Ready' : 'TTS Offline'}
+            </Text>
+
+            {/* Voice Recognition Status */}
+            <View
+              style={[
+                styles.statusDot,
+                {
+                  backgroundColor:
+                    hasVoicePermission && isVoiceAvailable
+                      ? '#4ade80'
+                      : '#f87171',
+                  marginLeft: 16,
+                },
+              ]}
+            />
+            <Text style={styles.modelStatusText}>
+              {hasVoicePermission && isVoiceAvailable
+                ? 'Voice Ready'
+                : 'Voice Offline'}
             </Text>
           </View>
         </View>
@@ -870,6 +1106,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
     fontWeight: '500',
+  },
+  // Voice Recognition Button Styles
+  voiceButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  voiceButtonActive: {
+    backgroundColor: '#dc2626',
+    borderColor: '#b91c1c',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+    transform: [{ scale: 1.1 }],
+  },
+  voiceButtonDisabled: {
+    backgroundColor: '#1f2937',
+    borderColor: '#374151',
+    opacity: 0.5,
+  },
+  voiceIcon: {
+    fontSize: 16,
+    color: '#d1d5db',
+  },
+  voiceIconActive: {
+    color: '#ffffff',
+  },
+  // Speech Feedback Styles
+  speechFeedback: {
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  speechFeedbackText: {
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   // TTS Speaker Button Styles
   speakerButton: {
