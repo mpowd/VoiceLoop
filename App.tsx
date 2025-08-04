@@ -1,337 +1,385 @@
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
-  ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   View,
-  TextInput,
   TouchableOpacity,
+  Animated,
+  Modal,
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
   Alert,
+  PermissionsAndroid,
+  Vibration,
   NativeModules,
   NativeEventEmitter,
-  Vibration,
-  Modal,
-  Platform,
-  PermissionsAndroid,
 } from 'react-native';
-import Tts from 'react-native-tts';
 import Voice from '@react-native-voice/voice';
+import Tts from 'react-native-tts';
 
 const { GemmaLLM } = NativeModules;
 
-// Top 20 most spoken languages worldwide
-const LANGUAGES = [
-  { code: 'en', name: 'English', native: 'English', speakers: '1.5B' },
-  { code: 'zh', name: 'Chinese', native: '中文', speakers: '1.1B' },
-  { code: 'hi', name: 'Hindi', native: 'हिन्दी', speakers: '602M' },
-  { code: 'es', name: 'Spanish', native: 'Español', speakers: '559M' },
-  { code: 'fr', name: 'French', native: 'Français', speakers: '280M' },
-  { code: 'ar', name: 'Arabic', native: 'العربية', speakers: '422M' },
-  { code: 'bn', name: 'Bengali', native: 'বাংলা', speakers: '268M' },
-  { code: 'ru', name: 'Russian', native: 'Русский', speakers: '258M' },
-  { code: 'pt', name: 'Portuguese', native: 'Português', speakers: '260M' },
-  {
-    code: 'id',
-    name: 'Indonesian',
-    native: 'Bahasa Indonesia',
-    speakers: '199M',
-  },
-  { code: 'ur', name: 'Urdu', native: 'اردو', speakers: '170M' },
-  { code: 'de', name: 'German', native: 'Deutsch', speakers: '132M' },
-  { code: 'ja', name: 'Japanese', native: '日本語', speakers: '125M' },
-  { code: 'sw', name: 'Swahili', native: 'Kiswahili', speakers: '200M' },
-  { code: 'mr', name: 'Marathi', native: 'मराठी', speakers: '83M' },
-  { code: 'te', name: 'Telugu', native: 'తెలుగు', speakers: '82M' },
-  { code: 'tr', name: 'Turkish', native: 'Türkçe', speakers: '88M' },
-  { code: 'ta', name: 'Tamil', native: 'தமிழ்', speakers: '78M' },
-  { code: 'vi', name: 'Vietnamese', native: 'Tiếng Việt', speakers: '85M' },
-  { code: 'ko', name: 'Korean', native: '한국어', speakers: '82M' },
+// 40 Most Spoken Languages Worldwide
+const languages = [
+  { code: 'en-US', name: 'English', native: 'English', flag: '🇺🇸' },
+  { code: 'zh-CN', name: 'Chinese (Mandarin)', native: '中文', flag: '🇨🇳' },
+  { code: 'hi-IN', name: 'Hindi', native: 'हिन्दी', flag: '🇮🇳' },
+  { code: 'es-ES', name: 'Spanish', native: 'Español', flag: '🇪🇸' },
+  { code: 'fr-FR', name: 'French', native: 'Français', flag: '🇫🇷' },
+  { code: 'ar-SA', name: 'Arabic', native: 'العربية', flag: '🇸🇦' },
+  { code: 'bn-BD', name: 'Bengali', native: 'বাংলা', flag: '🇧🇩' },
+  { code: 'ru-RU', name: 'Russian', native: 'Русский', flag: '🇷🇺' },
+  { code: 'pt-PT', name: 'Portuguese', native: 'Português', flag: '🇵🇹' },
+  { code: 'id-ID', name: 'Indonesian', native: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { code: 'ur-PK', name: 'Urdu', native: 'اردو', flag: '🇵🇰' },
+  { code: 'de-DE', name: 'German', native: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ja-JP', name: 'Japanese', native: '日本語', flag: '🇯🇵' },
+  { code: 'sw-KE', name: 'Swahili', native: 'Kiswahili', flag: '🇰🇪' },
+  { code: 'mr-IN', name: 'Marathi', native: 'मराठी', flag: '🇮🇳' },
+  { code: 'te-IN', name: 'Telugu', native: 'తెలుగు', flag: '🇮🇳' },
+  { code: 'tr-TR', name: 'Turkish', native: 'Türkçe', flag: '🇹🇷' },
+  { code: 'ta-IN', name: 'Tamil', native: 'தமிழ்', flag: '🇮🇳' },
+  { code: 'vi-VN', name: 'Vietnamese', native: 'Tiếng Việt', flag: '🇻🇳' },
+  { code: 'ko-KR', name: 'Korean', native: '한국어', flag: '🇰🇷' },
+  { code: 'it-IT', name: 'Italian', native: 'Italiano', flag: '🇮🇹' },
+  { code: 'th-TH', name: 'Thai', native: 'ไทย', flag: '🇹🇭' },
+  { code: 'gu-IN', name: 'Gujarati', native: 'ગુજરાતી', flag: '🇮🇳' },
+  { code: 'pl-PL', name: 'Polish', native: 'Polski', flag: '🇵🇱' },
+  { code: 'uk-UA', name: 'Ukrainian', native: 'Українська', flag: '🇺🇦' },
+  { code: 'my-MM', name: 'Burmese', native: 'မြန်မာ', flag: '🇲🇲' },
+  { code: 'ml-IN', name: 'Malayalam', native: 'മലയാളം', flag: '🇮🇳' },
+  { code: 'kn-IN', name: 'Kannada', native: 'ಕನ್ನಡ', flag: '🇮🇳' },
+  { code: 'or-IN', name: 'Odia', native: 'ଓଡ଼ିଆ', flag: '🇮🇳' },
+  { code: 'pa-IN', name: 'Punjabi', native: 'ਪੰਜਾਬੀ', flag: '🇮🇳' },
+  { code: 'ro-RO', name: 'Romanian', native: 'Română', flag: '🇷🇴' },
+  { code: 'nl-NL', name: 'Dutch', native: 'Nederlands', flag: '🇳🇱' },
+  { code: 'hu-HU', name: 'Hungarian', native: 'Magyar', flag: '🇭🇺' },
+  { code: 'cs-CZ', name: 'Czech', native: 'Čeština', flag: '🇨🇿' },
+  { code: 'el-GR', name: 'Greek', native: 'Ελληνικά', flag: '🇬🇷' },
+  { code: 'he-IL', name: 'Hebrew', native: 'עברית', flag: '🇮🇱' },
+  { code: 'fi-FI', name: 'Finnish', native: 'Suomi', flag: '🇫🇮' },
+  { code: 'sv-SE', name: 'Swedish', native: 'Svenska', flag: '🇸🇪' },
+  { code: 'no-NO', name: 'Norwegian', native: 'Norsk', flag: '🇳🇴' },
+  { code: 'da-DK', name: 'Danish', native: 'Dansk', flag: '🇩🇰' },
 ];
 
-const App: React.FC = () => {
-  const [inputText, setInputText] = useState<string>('');
-  const [translatedText, setTranslatedText] = useState<string>('');
-  const [accumulatedTranslation, setAccumulatedTranslation] =
-    useState<string>(''); // NEU!
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isModelInitialized, setIsModelInitialized] = useState<boolean>(false);
-  const [inputLanguage, setInputLanguage] = useState(LANGUAGES[0]); // English
-  const [outputLanguage, setOutputLanguage] = useState(LANGUAGES[11]); // German
-  const [showInputLanguageModal, setShowInputLanguageModal] =
-    useState<boolean>(false);
-  const [showOutputLanguageModal, setShowOutputLanguageModal] =
-    useState<boolean>(false);
-
-  // TTS States
-  const [isTtsInitialized, setIsTtsInitialized] = useState<boolean>(false);
-  const [isSpeakingInput, setIsSpeakingInput] = useState<boolean>(false);
-  const [isSpeakingOutput, setIsSpeakingOutput] = useState<boolean>(false);
-  const [availableVoices, setAvailableVoices] = useState<any[]>([]);
-
-  // STT States
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [hasVoicePermission, setHasVoicePermission] = useState<boolean>(false);
-  const [isVoiceAvailable, setIsVoiceAvailable] = useState<boolean>(false);
-  const [partialSpeechText, setPartialSpeechText] = useState<string>('');
+const LoadingScreen = ({ message = 'Model loading...' }) => {
+  const [animation] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    console.log('Setting up event listeners...');
-    const eventEmitter = new NativeEventEmitter(GemmaLLM);
-
-    const responseListener = eventEmitter.addListener(
-      'llmResponse',
-      response => {
-        console.log('=== LLM RESPONSE RECEIVED ===');
-        console.log('Raw response:', JSON.stringify(response));
-        console.log('Response type:', typeof response);
-
-        try {
-          // Handle different response formats safely
-          let translationText = '';
-          if (typeof response === 'string') {
-            // Status messages during initialization
-            translationText = response;
-            setTranslatedText(translationText);
-            setIsLoading(false);
-            return;
-          } else if (
-            response &&
-            (response.text !== undefined || response.message)
-          ) {
-            // Streaming translation responses
-            if (response.text !== undefined) {
-              translationText = response.text;
-            } else if (response.message) {
-              translationText = response.message;
-            }
-
-            if (!response.done && translationText) {
-              setAccumulatedTranslation(prev => {
-                const newAccumulated = prev + translationText;
-                setTranslatedText(newAccumulated);
-                console.log('Current accumulated:', newAccumulated);
-                return newAccumulated;
-              });
-            } else if (response.done) {
-              setAccumulatedTranslation(prev => {
-                const finalText = prev + translationText;
-                setTranslatedText(finalText.trim());
-                console.log('Final translation:', finalText.trim());
-                setIsLoading(false);
-                Vibration.vibrate(50);
-                return '';
-              });
-            }
-          } else {
-            translationText = 'Translation received but format unknown';
-            setTranslatedText(translationText);
-            setIsLoading(false);
-          }
-        } catch (error) {
-          console.error('Error processing response:', error);
-          setTranslatedText('Error processing translation');
-          setAccumulatedTranslation('');
-          setIsLoading(false);
-        }
-      },
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animation, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animation, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]),
     );
 
-    const errorListener = eventEmitter.addListener('llmError', error => {
-      console.error('=== LLM ERROR ===');
-      console.error('Error:', error);
-      setIsLoading(false);
-      setTranslatedText(`❌ Error: ${error}`);
-      setAccumulatedTranslation('');
-      Alert.alert('Translation Error', String(error));
-    });
+    pulse.start();
 
-    // Initialize model, TTS, and Voice
-    console.log('Starting initialization...');
-    initializeModel();
-    initializeTts();
-    initializeVoice();
-    requestVoicePermission();
+    return () => pulse.stop();
+  }, [animation]);
 
+  const opacity = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 1],
+  });
+
+  const scale = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.95, 1.05],
+  });
+
+  return (
+    <View style={styles.loadingContainer}>
+      <Animated.View
+        style={[
+          styles.loadingContent,
+          {
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        <View style={styles.loadingDots}>
+          <View style={[styles.dot, styles.dot1]} />
+          <View style={[styles.dot, styles.dot2]} />
+          <View style={[styles.dot, styles.dot3]} />
+        </View>
+        <Text style={styles.loadingText}>{message}</Text>
+      </Animated.View>
+    </View>
+  );
+};
+
+// Translation Loading Animation Component
+const TranslationLoadingAnimation = () => {
+  const [animation] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animation, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animation, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    pulse.start();
+
+    return () => pulse.stop();
+  }, [animation]);
+
+  const opacity = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1],
+  });
+
+  const scale = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1.1],
+  });
+
+  return (
+    <View style={styles.translationLoadingContainer}>
+      <Animated.View
+        style={[
+          styles.translationLoadingDots,
+          {
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        <View style={[styles.translationDot, styles.translationDot1]} />
+        <View style={[styles.translationDot, styles.translationDot2]} />
+        <View style={[styles.translationDot, styles.translationDot3]} />
+      </Animated.View>
+      <Text style={styles.translationLoadingText}>Übersetze...</Text>
+    </View>
+  );
+};
+
+const LanguageSelector = ({
+  languages,
+  selectedLanguage,
+  onSelect,
+  title,
+  searchQuery,
+  onSearchChange,
+}) => {
+  const filteredLanguages = languages.filter(
+    language =>
+      language.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      language.native.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  return (
+    <View style={styles.languageSelectorContainer}>
+      <Text style={styles.selectorTitle}>{title}</Text>
+
+      {/* Search Input */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search languages..."
+          placeholderTextColor="#64748b"
+          value={searchQuery}
+          onChangeText={onSearchChange}
+        />
+        <Text style={styles.searchIcon}>🔍</Text>
+      </View>
+
+      <ScrollView
+        style={styles.languageList}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
+        {filteredLanguages.map(language => (
+          <TouchableOpacity
+            key={language.code}
+            style={[
+              styles.languageOption,
+              selectedLanguage.code === language.code &&
+                styles.selectedLanguageOption,
+            ]}
+            onPress={() => onSelect(language)}
+          >
+            <Text style={styles.languageFlag}>{language.flag}</Text>
+            <View style={styles.languageTextContainer}>
+              <Text
+                style={[
+                  styles.languageName,
+                  selectedLanguage.code === language.code &&
+                    styles.selectedLanguageName,
+                ]}
+              >
+                {language.name}
+              </Text>
+              <Text
+                style={[
+                  styles.languageNative,
+                  selectedLanguage.code === language.code &&
+                    styles.selectedLanguageNative,
+                ]}
+              >
+                {language.native}
+              </Text>
+            </View>
+            {selectedLanguage.code === language.code && (
+              <Text style={styles.selectedCheck}>✓</Text>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+const MenuModal = ({ visible, onClose }) => {
+  const menuItems = [
+    {
+      id: 'voice',
+      icon: '🎤',
+      title: 'Voice Mode',
+      subtitle: 'Sprechen & Übersetzen',
+    },
+    {
+      id: 'history',
+      icon: '📚',
+      title: 'History',
+      subtitle: 'Übersetzungsverlauf',
+    },
+    {
+      id: 'favorites',
+      icon: '⭐',
+      title: 'Favorites',
+      subtitle: 'Gespeicherte Übersetzungen',
+    },
+    {
+      id: 'settings',
+      icon: '⚙️',
+      title: 'Settings',
+      subtitle: 'App-Einstellungen',
+    },
+  ];
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <View style={styles.menuContainer}>
+          <View style={styles.menuHeader}>
+            <Text style={styles.menuTitle}>Menu</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeButtonText}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.menuItems}>
+            {menuItems.map(item => (
+              <TouchableOpacity key={item.id} style={styles.menuItem}>
+                <Text style={styles.menuItemIcon}>{item.icon}</Text>
+                <View style={styles.menuItemText}>
+                  <Text style={styles.menuItemTitle}>{item.title}</Text>
+                  <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const VoiceLoopApp = () => {
+  const [isModelReady, setIsModelReady] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSourceSelector, setShowSourceSelector] = useState(false);
+  const [showTargetSelector, setShowTargetSelector] = useState(false);
+  const [inputText, setInputText] = useState('');
+  const [translatedText, setTranslatedText] = useState('');
+  const [accumulatedTranslation, setAccumulatedTranslation] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Model loading...');
+
+  // Mirror Mode
+  const [isMirrorMode, setIsMirrorMode] = useState(false);
+
+  // Voice/STT States
+  const [hasAudioPermission, setHasAudioPermission] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+
+  // TTS States
+  const [isTtsInitialized, setIsTtsInitialized] = useState(false);
+  const [isSpeakingInput, setIsSpeakingInput] = useState(false);
+  const [isSpeakingOutput, setIsSpeakingOutput] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState([]);
+
+  // Search states for language selector
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+  const [targetSearchQuery, setTargetSearchQuery] = useState('');
+
+  // Translation timeout handler
+  const [translationTimeout, setTranslationTimeout] = useState(null);
+
+  const [sourceLanguage, setSourceLanguage] = useState(languages[0]); // English
+  const [targetLanguage, setTargetLanguage] = useState(languages[11]); // German
+
+  useEffect(() => {
+    initializeApp();
     return () => {
-      console.log('Cleaning up event listeners...');
-      responseListener.remove();
-      errorListener.remove();
+      if (Voice && Voice.destroy) {
+        Voice.destroy().catch(console.error);
+      }
       cleanupTts();
-      cleanupVoice();
+      if (translationTimeout) {
+        clearTimeout(translationTimeout);
+      }
+      // Cleanup event listeners if they exist
+      if (global.gemmaListeners) {
+        global.gemmaListeners.responseListener?.remove();
+        global.gemmaListeners.errorListener?.remove();
+      }
     };
   }, []);
 
-  // === VOICE RECOGNITION FUNCTIONS ===
-  const initializeVoice = () => {
-    try {
-      // Voice Event Handlers
-      Voice.onSpeechStart = onSpeechStart;
-      Voice.onSpeechEnd = onSpeechEnd;
-      Voice.onSpeechResults = onSpeechResults;
-      Voice.onSpeechError = onSpeechError;
-      Voice.onSpeechPartialResults = onSpeechPartialResults;
-
-      // Check if voice is available
-      Voice.isAvailable()
-        .then(available => {
-          setIsVoiceAvailable(available);
-          console.log('Voice available:', available);
-        })
-        .catch(error => {
-          console.error('Voice availability check failed:', error);
-          setIsVoiceAvailable(false);
-        });
-    } catch (error) {
-      console.error('Voice initialization failed:', error);
-      setIsVoiceAvailable(false);
-    }
+  const initializeApp = async () => {
+    await requestAudioPermission();
+    await initializeVoice();
+    await initializeTts();
+    await loadGemmaModel();
   };
 
-  const cleanupVoice = () => {
-    Voice.destroy().then(Voice.removeAllListeners).catch(console.error);
-  };
-
-  const requestVoicePermission = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Mikrofon Berechtigung',
-            message:
-              'Diese App benötigt Zugriff auf das Mikrofon für Spracherkennung.',
-            buttonPositive: 'OK',
-          },
-        );
-        setHasVoicePermission(granted === PermissionsAndroid.RESULTS.GRANTED);
-      } catch (err) {
-        console.warn('Voice permission error:', err);
-        setHasVoicePermission(false);
-      }
-    } else {
-      setHasVoicePermission(true);
-    }
-  };
-
-  // Voice Event Handlers
-  const onSpeechStart = (e: any) => {
-    console.log('Speech started', e);
-    setIsRecording(true);
-    setPartialSpeechText('');
-  };
-
-  const onSpeechEnd = (e: any) => {
-    console.log('Speech ended', e);
-    setIsRecording(false);
-    setPartialSpeechText('');
-  };
-
-  const onSpeechResults = (e: any) => {
-    console.log('Speech results', e);
-    if (e.value && e.value.length > 0) {
-      const recognizedText = e.value[0];
-      setInputText(recognizedText); // Set the recognized text as input
-      setPartialSpeechText('');
-      Vibration.vibrate(50);
-    }
-  };
-
-  const onSpeechPartialResults = (e: any) => {
-    console.log('Partial speech results', e);
-    if (e.value && e.value.length > 0) {
-      setPartialSpeechText(e.value[0]);
-    }
-  };
-
-  const onSpeechError = (e: any) => {
-    console.error('Speech error', e);
-    setIsRecording(false);
-    setPartialSpeechText('');
-
-    // Handle different error types silently for better UX
-    switch (e.error?.code) {
-      case '5':
-        console.log('Client-side error - already started');
-        break;
-      case '6':
-        Alert.alert('Fehler', 'Keine Berechtigung für Mikrofon');
-        break;
-      case '8':
-        Alert.alert('Fehler', 'Audio-Aufnahme fehlgeschlagen');
-        break;
-      default:
-        if (
-          e.error?.message &&
-          !e.error.message.includes('5/Client side error')
-        ) {
-          console.log('Speech error:', e.error?.message);
-        }
-    }
-  };
-
-  const startVoiceRecognition = async () => {
-    if (!hasVoicePermission) {
-      Alert.alert('Keine Berechtigung', 'Mikrofon-Zugriff erforderlich');
-      return;
-    }
-
-    if (!isVoiceAvailable) {
-      Alert.alert('Nicht verfügbar', 'Spracherkennung ist nicht verfügbar');
-      return;
-    }
-
-    if (isRecording) {
-      console.log('Already recording, ignoring start request');
-      return;
-    }
-
-    try {
-      setPartialSpeechText('');
-      // Use the input language for speech recognition
-      const voiceLanguage = getVoiceLanguageCode(inputLanguage.code);
-      await Voice.start(voiceLanguage);
-    } catch (error) {
-      console.error('Error starting voice recognition:', error);
-      setIsRecording(false);
-    }
-  };
-
-  const stopVoiceRecognition = async () => {
-    if (!isRecording) {
-      return;
-    }
-
-    try {
-      await Voice.stop();
-    } catch (error) {
-      console.error('Error stopping voice recognition:', error);
-    }
-  };
-
-  // Convert language codes to voice recognition format
-  const getVoiceLanguageCode = (languageCode: string): string => {
-    const voiceLanguageMappings: { [key: string]: string } = {
-      en: 'en-US',
-      de: 'de-DE',
-      es: 'es-ES',
-      fr: 'fr-FR',
-      it: 'it-IT',
-      pt: 'pt-BR',
-      ru: 'ru-RU',
-      ja: 'ja-JP',
-      ko: 'ko-KR',
-      zh: 'zh-CN',
-      hi: 'hi-IN',
-      ar: 'ar-SA',
-      tr: 'tr-TR',
-    };
-    return voiceLanguageMappings[languageCode] || 'en-US';
-  };
-
-  // === EXISTING TTS AND TRANSLATION FUNCTIONS ===
-  const initializeTts = async (): Promise<void> => {
+  // === TTS FUNCTIONS ===
+  const initializeTts = async () => {
     try {
       console.log('=== TTS INITIALIZATION START ===');
 
@@ -384,12 +432,12 @@ const App: React.FC = () => {
           ],
         );
       } else {
-        Alert.alert('TTS Error', `Failed to initialize TTS: ${error.message}`);
+        console.log('TTS initialization failed, but continuing without TTS');
       }
     }
   };
 
-  const cleanupTts = (): void => {
+  const cleanupTts = () => {
     try {
       Tts.stop();
       Tts.removeAllListeners('tts-start');
@@ -401,11 +449,7 @@ const App: React.FC = () => {
     }
   };
 
-  const speakText = async (
-    text: string,
-    language: string,
-    isInput: boolean = false,
-  ): Promise<void> => {
+  const speakText = async (text, language, isInput = false) => {
     if (!isTtsInitialized) {
       Alert.alert('TTS Error', 'Text-to-Speech not available');
       return;
@@ -418,8 +462,9 @@ const App: React.FC = () => {
 
     // Clean text for TTS (remove emojis and special characters)
     const cleanText = text
-      .replace(/[🔍🤖✅❌🔄🌐🗑️🎤]/g, '')
-      .replace(/Engine:\s*Gemma-3[\s\S]*?translate\.\.\./i, 'Translation ready')
+      .replace(/[🔍🤖✅❌🔄🌐🗑️🎤⏳]/g, '')
+      .replace(/Übersetze\.\.\./g, '')
+      .replace(/Translating\.\.\./g, '')
       .trim();
 
     if (cleanText.length === 0) {
@@ -447,11 +492,12 @@ const App: React.FC = () => {
         await Tts.setDefaultVoice(bestVoice.id);
       }
 
-      // Set language
-      await Tts.setDefaultLanguage(language);
+      // Set language (convert from our format to TTS format)
+      const ttsLanguage = language.includes('-') ? language : language + '-US';
+      await Tts.setDefaultLanguage(ttsLanguage);
 
       console.log(
-        `Speaking text in ${language}: "${cleanText.substring(0, 50)}..."`,
+        `Speaking text in ${ttsLanguage}: "${cleanText.substring(0, 50)}..."`,
       );
 
       // Speak the text
@@ -466,7 +512,7 @@ const App: React.FC = () => {
     }
   };
 
-  const findBestVoice = (languageCode: string) => {
+  const findBestVoice = languageCode => {
     // Find voice that matches the language code
     const exactMatch = availableVoices.find(
       voice => voice.language === languageCode,
@@ -482,7 +528,7 @@ const App: React.FC = () => {
     return prefixMatch;
   };
 
-  const stopSpeaking = async (): Promise<void> => {
+  const stopSpeaking = async () => {
     try {
       await Tts.stop();
       setIsSpeakingInput(false);
@@ -493,491 +539,980 @@ const App: React.FC = () => {
     }
   };
 
-  const initializeModel = async (): Promise<void> => {
+  const loadGemmaModel = async () => {
     try {
-      console.log('=== MODEL INITIALIZATION START ===');
-      setIsLoading(true);
-      setTranslatedText('🔍 Checking for translation model...');
+      console.log('🤖 Loading Gemma model...');
+      setLoadingMessage('🔍 Checking for translation model...');
 
-      const availability = await GemmaLLM.checkModelAvailability();
-      console.log('Model availability:', availability);
+      // Reset model ready state at the beginning
+      setIsModelReady(false);
 
-      if (availability.availableCount === 0) {
-        const instructions = await GemmaLLM.getSetupInstructions();
-        setTranslatedText(`❌ Translation model not found!\n\n${instructions}`);
-        Alert.alert(
-          'Model Setup Required',
-          'Please install the Gemma model via ADB.',
-        );
-        return;
+      // Check if GemmaLLM is available
+      if (!GemmaLLM) {
+        throw new Error('GemmaLLM Native Module not found');
       }
 
-      setTranslatedText('🤖 Loading translation engine...');
+      // Setup event listeners first
+      const eventEmitter = new NativeEventEmitter(GemmaLLM);
 
-      const result = await GemmaLLM.initializeModel();
-      console.log('Model initialization result:', result);
+      const responseListener = eventEmitter.addListener(
+        'llmResponse',
+        response => {
+          console.log('=== LLM RESPONSE RECEIVED ===');
+          console.log('Raw response:', JSON.stringify(response));
 
-      setIsModelInitialized(true);
-      setTranslatedText(
-        `✅ Translation ready!\n\n🌐 Engine: Gemma-3\n📦 Size: ${result.modelSizeMB.toFixed(
-          1,
-        )} MB\n\nSelect languages and type or speak something to translate...`,
+          // Clear timeout on successful response
+          if (translationTimeout) {
+            clearTimeout(translationTimeout);
+            setTranslationTimeout(null);
+          }
+
+          try {
+            let translationText = '';
+            if (typeof response === 'string') {
+              translationText = response;
+              setTranslatedText(translationText);
+              setIsTranslating(false);
+              return;
+            } else if (
+              response &&
+              (response.text !== undefined || response.message)
+            ) {
+              if (response.text !== undefined) {
+                translationText = response.text;
+              } else if (response.message) {
+                translationText = response.message;
+              }
+
+              if (!response.done && translationText) {
+                setAccumulatedTranslation(prev => {
+                  const newAccumulated = prev + translationText;
+                  setTranslatedText(newAccumulated);
+                  return newAccumulated;
+                });
+              } else if (response.done) {
+                setAccumulatedTranslation(prev => {
+                  const finalText = prev + translationText;
+                  setTranslatedText(finalText.trim());
+                  setIsTranslating(false);
+                  Vibration.vibrate(50);
+                  return '';
+                });
+              }
+            } else {
+              translationText = 'Translation received but format unknown';
+              setTranslatedText(translationText);
+              setIsTranslating(false);
+            }
+          } catch (error) {
+            console.error('Error processing response:', error);
+            setTranslatedText('Error processing translation');
+            setAccumulatedTranslation('');
+            setIsTranslating(false);
+          }
+        },
       );
+
+      const errorListener = eventEmitter.addListener('llmError', error => {
+        console.error('=== LLM ERROR ===');
+        console.error('Error:', error);
+        setIsTranslating(false);
+        setTranslatedText(`❌ Error: ${error}`);
+        setAccumulatedTranslation('');
+
+        // Clear timeout on error
+        if (translationTimeout) {
+          clearTimeout(translationTimeout);
+          setTranslationTimeout(null);
+        }
+      });
+
+      // Check model availability first
+      setLoadingMessage('🔍 Checking model availability...');
+
+      if (typeof GemmaLLM.checkModelAvailability === 'function') {
+        const availability = await GemmaLLM.checkModelAvailability();
+        console.log('Model availability:', availability);
+
+        if (availability.availableCount === 0) {
+          if (typeof GemmaLLM.getSetupInstructions === 'function') {
+            const instructions = await GemmaLLM.getSetupInstructions();
+            setTranslatedText(
+              `❌ Translation model not found!\n\n${instructions}`,
+            );
+          } else {
+            setTranslatedText('❌ Translation model not found!');
+          }
+          Alert.alert(
+            'Model Setup Required',
+            'Please install the Gemma model via ADB.',
+          );
+          return;
+        }
+      }
+
+      setLoadingMessage('🤖 Loading translation engine...');
+
+      // Initialize the model
+      if (typeof GemmaLLM.initializeModel === 'function') {
+        const result = await GemmaLLM.initializeModel();
+        console.log('Model initialization result:', result);
+        console.log('✅ Gemma model loaded successfully');
+
+        // Keep translation area clean after model loads
+        setTranslatedText('');
+
+        // Also set loading message to success
+        setLoadingMessage('✅ Model ready!');
+
+        // IMPORTANT: Set model ready AFTER everything is initialized
+        console.log('🎯 Setting isModelReady = true');
+        setIsModelReady(true);
+      } else if (typeof GemmaLLM.loadModel === 'function') {
+        // Fallback to loadModel if initializeModel doesn't exist
+        await GemmaLLM.loadModel();
+        console.log('✅ Gemma model loaded successfully');
+        setTranslatedText('');
+        setLoadingMessage('✅ Model ready!');
+
+        // IMPORTANT: Set model ready AFTER everything is initialized
+        console.log('🎯 Setting isModelReady = true');
+        setIsModelReady(true);
+      } else {
+        throw new Error('No valid model loading function found');
+      }
+
+      // Store listeners for cleanup
+      global.gemmaListeners = { responseListener, errorListener };
+
+      // Add a small delay to ensure state is properly set
+      setTimeout(() => {
+        console.log('🔄 Double-checking isModelReady state');
+        setIsModelReady(true);
+      }, 100);
     } catch (error) {
-      console.error('=== MODEL INITIALIZATION ERROR ===');
-      console.error('Error:', error);
-      setTranslatedText(`❌ Failed to load translation engine: ${error}`);
-      Alert.alert('Initialization Error', `Failed to initialize: ${error}`);
-    } finally {
-      setIsLoading(false);
+      console.error('❌ Failed to load Gemma model:', error);
+      setLoadingMessage('❌ Model loading failed');
+
+      // Better error handling - show specific error but don't crash
+      let errorMessage = 'Failed to load translation model';
+      if (error.message.includes('not found')) {
+        errorMessage = 'GemmaLLM module not properly installed';
+      } else if (error.message.includes('not a function')) {
+        errorMessage = 'GemmaLLM module missing required functions';
+      }
+
+      Alert.alert(
+        'Model Error',
+        `${errorMessage}. Please check your setup.\n\nError: ${error.message}`,
+        [
+          { text: 'Retry', onPress: loadGemmaModel },
+          {
+            text: 'Continue anyway',
+            onPress: () => {
+              console.log('🎯 Force setting isModelReady = true');
+              setIsModelReady(true);
+            },
+          },
+        ],
+      );
+
+      // Set a fallback ready state so app doesn't stay on loading screen forever
+      setTimeout(() => {
+        console.log('🎯 Fallback setting isModelReady = true');
+        setIsModelReady(true);
+        setTranslatedText(
+          '❌ Translation engine not available. Please check your setup.',
+        );
+      }, 3000);
     }
   };
 
-  const translateText = async (): Promise<void> => {
-    if (!inputText.trim()) {
-      Alert.alert('Notice', 'Please enter or speak text to translate!');
+  const requestAudioPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        );
+        setHasAudioPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+      } catch (err) {
+        console.error('Permission request error:', err);
+        setHasAudioPermission(false);
+      }
+    } else {
+      setHasAudioPermission(true);
+    }
+  };
+
+  const initializeVoice = async () => {
+    try {
+      Voice.onSpeechStart = () => {
+        console.log('🎤 Speech started');
+        setIsProcessingVoice(false);
+      };
+
+      Voice.onSpeechEnd = () => {
+        console.log('🛑 Speech ended - Processing...');
+        setIsProcessingVoice(true);
+      };
+
+      // Real-time transcription during speech
+      Voice.onSpeechPartialResults = async e => {
+        console.log('📝 Partial speech results:', e.value);
+
+        if (e.value && e.value.length > 0) {
+          const partialText = e.value[0];
+          console.log('⏳ Partial text:', partialText);
+
+          // Append to existing text instead of replacing
+          setInputText(prev => {
+            const existingText = prev.trim();
+            if (existingText) {
+              return existingText + ' ' + partialText;
+            }
+            return partialText;
+          });
+        }
+      };
+
+      Voice.onSpeechResults = async e => {
+        console.log('📝 Final speech results received:', e.value);
+
+        if (e.value && e.value.length > 0) {
+          const spokenText = e.value[0];
+          console.log('✅ Final recognized text:', spokenText);
+
+          // Append to existing text instead of replacing
+          setInputText(prev => {
+            const existingText = prev.trim();
+            if (existingText) {
+              return existingText + ' ' + spokenText;
+            }
+            return spokenText;
+          });
+
+          Vibration.vibrate(50);
+        }
+
+        setIsProcessingVoice(false);
+        // Stop automatically after final results
+        setIsListening(false);
+      };
+
+      Voice.onSpeechError = e => {
+        console.log('⚠️ Voice error:', e.error);
+        setIsListening(false);
+        setIsProcessingVoice(false);
+
+        if (e.error?.code !== '5') {
+          console.error('Voice error:', e.error);
+        }
+      };
+    } catch (error) {
+      console.error('Voice initialization failed:', error);
+    }
+  };
+
+  // Toggle function instead of separate start/stop
+  const toggleListening = async () => {
+    console.log('🔄 Toggling voice recognition...', {
+      isListening,
+      isProcessingVoice,
+    });
+
+    if (!hasAudioPermission) {
+      Alert.alert(
+        'Permission Required',
+        'Microphone permission is required for voice input',
+      );
       return;
     }
 
-    if (!isModelInitialized) {
+    if (isProcessingVoice) {
+      console.log('⚠️ Still processing, please wait');
+      return;
+    }
+
+    if (isListening) {
+      // Stop listening
+      try {
+        console.log('🛑 Stopping voice recognition...');
+        await Voice.stop();
+        setIsListening(false);
+      } catch (error) {
+        console.error('Error stopping voice recognition:', error);
+        setIsListening(false);
+      }
+    } else {
+      // Start listening
+      try {
+        console.log('🚀 Starting voice recognition...');
+        setIsListening(true);
+        setIsProcessingVoice(false);
+
+        await Voice.start(sourceLanguage.code);
+        console.log(`✅ Voice.start(${sourceLanguage.code}) successful`);
+      } catch (error) {
+        console.error('Error starting voice recognition:', error);
+        setIsListening(false);
+      }
+    }
+  };
+
+  // Manual translation function - only called when translate button is pressed
+  const translateText = async () => {
+    const text = inputText.trim();
+    console.log('🔍 translateText called with:', {
+      text,
+      isModelReady,
+    });
+
+    if (!text) {
+      Alert.alert('Error', 'Please enter text to translate');
+      return;
+    }
+
+    if (!isModelReady) {
+      console.log('⚠️ Model not ready yet - isModelReady:', isModelReady);
       Alert.alert('Error', 'Translation engine not ready!');
       return;
     }
 
+    console.log('✅ Model is ready, proceeding with translation');
+    setIsTranslating(true);
+
+    // Set a timeout to handle stuck translations
+    const timeout = setTimeout(() => {
+      console.log('⏰ Translation timeout - resetting state');
+      setIsTranslating(false);
+      setTranslatedText('❌ Translation timed out. Please try again.');
+      setAccumulatedTranslation('');
+    }, 30000); // 30 second timeout
+
+    setTranslationTimeout(timeout);
+
     try {
-      console.log('=== TRANSLATION START ===');
+      const sourceLanguageName = sourceLanguage.name;
+      const targetLanguageName = targetLanguage.name;
 
-      setIsLoading(true);
-      setTranslatedText('🔄 Translating...');
+      const prompt = `Translate the following text from ${sourceLanguageName} to ${targetLanguageName}.
+
+Important: Only provide the translated text, nothing else. No explanations, no "Translation:" prefix, no additional commentary.
+
+Text: "${text}"`;
+
+      console.log('🔄 Translating with Gemma:', {
+        sourceLanguageName,
+        targetLanguageName,
+        text,
+      });
 
       setAccumulatedTranslation('');
+      setTranslatedText(''); // Clear previous translation for loading animation
 
-      const translationPrompt = `Translate the following text from ${inputLanguage.name} to ${outputLanguage.name}.
+      // Use async method if available, otherwise fallback to sync
+      if (typeof GemmaLLM.generateResponseAsync === 'function') {
+        console.log('📤 Using generateResponseAsync');
+        GemmaLLM.generateResponseAsync(prompt);
+      } else if (typeof GemmaLLM.generateResponse === 'function') {
+        console.log('📤 Using generateResponse (sync)');
+        const response = await GemmaLLM.generateResponse(prompt);
+        console.log('✅ Gemma response:', response);
 
-  Important: Only provide the translated text, nothing else. No explanations, no "Translation:" prefix, no additional commentary.
+        let cleanedTranslation = response.trim();
+        if (
+          cleanedTranslation.startsWith('"') &&
+          cleanedTranslation.endsWith('"')
+        ) {
+          cleanedTranslation = cleanedTranslation.slice(1, -1);
+        }
 
-  Text: "${inputText}"`;
+        setTranslatedText(cleanedTranslation);
+        setIsTranslating(false);
 
-      console.log('Sending prompt to LLM...');
-      GemmaLLM.generateResponseAsync(translationPrompt);
+        // Clear timeout on successful response
+        if (translationTimeout) {
+          clearTimeout(translationTimeout);
+          setTranslationTimeout(null);
+        }
+      } else {
+        throw new Error('No translation method available');
+      }
     } catch (error) {
-      console.error('=== TRANSLATION ERROR ===');
-      setIsLoading(false);
-      setTranslatedText(`❌ Translation failed: ${error}`);
-      setAccumulatedTranslation('');
-      Alert.alert('Translation Error', `Failed to translate: ${error}`);
+      console.error('❌ Translation error:', error);
+      setTranslatedText('Translation error occurred');
+      setIsTranslating(false);
+
+      // Clear timeout on error
+      if (translationTimeout) {
+        clearTimeout(translationTimeout);
+        setTranslationTimeout(null);
+      }
     }
   };
-  const swapLanguages = (): void => {
-    const temp = inputLanguage;
-    setInputLanguage(outputLanguage);
-    setOutputLanguage(temp);
 
-    // Also swap the text content if both have content
-    if (
-      inputText &&
-      translatedText &&
-      !translatedText.includes('❌') &&
-      !translatedText.includes('🔄')
-    ) {
-      const tempText = inputText;
-      setInputText(translatedText);
-      setTranslatedText(tempText);
-    }
-
-    Vibration.vibrate(30);
+  // Simple text input handler - no automatic translation
+  const handleTextChange = text => {
+    setInputText(text);
   };
 
-  const clearAll = (): void => {
+  const swapLanguages = () => {
+    const temp = sourceLanguage;
+    setSourceLanguage(targetLanguage);
+    setTargetLanguage(temp);
+
+    const tempText = inputText;
+    setInputText(translatedText);
+    setTranslatedText(tempText);
+  };
+
+  const handleSourceLanguageSelect = language => {
+    setSourceLanguage(language);
+    setShowSourceSelector(false);
+    setSourceSearchQuery('');
+  };
+
+  const handleTargetLanguageSelect = language => {
+    setTargetLanguage(language);
+    setShowTargetSelector(false);
+    setTargetSearchQuery('');
+  };
+
+  const clearAll = () => {
     setInputText('');
     setTranslatedText('');
-    setAccumulatedTranslation(''); // Reset accumulated text
-    setPartialSpeechText('');
+    setAccumulatedTranslation('');
     stopSpeaking();
   };
-  const selectInputLanguage = (language: (typeof LANGUAGES)[0]) => {
-    setInputLanguage(language);
-    setShowInputLanguageModal(false);
-    Vibration.vibrate(30);
+
+  const toggleMirrorMode = () => {
+    setIsMirrorMode(!isMirrorMode);
+    Vibration.vibrate(50);
   };
 
-  const selectOutputLanguage = (language: (typeof LANGUAGES)[0]) => {
-    setOutputLanguage(language);
-    setShowOutputLanguageModal(false);
-    Vibration.vibrate(30);
-  };
+  // Show Loading Screen if model is not ready
+  if (!isModelReady) {
+    return <LoadingScreen message={loadingMessage} />;
+  }
 
-  const LanguageModal = ({
-    visible,
-    onClose,
-    onSelect,
-    title,
-    currentLanguage,
-  }: {
-    visible: boolean;
-    onClose: () => void;
-    onSelect: (language: (typeof LANGUAGES)[0]) => void;
-    title: string;
-    currentLanguage: (typeof LANGUAGES)[0];
-  }) => (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.languageList}
-            showsVerticalScrollIndicator={false}
-          >
-            {LANGUAGES.map(language => (
-              <TouchableOpacity
-                key={language.code}
-                style={[
-                  styles.languageItem,
-                  currentLanguage.code === language.code &&
-                    styles.languageItemSelected,
-                ]}
-                onPress={() => onSelect(language)}
-              >
-                <View style={styles.languageInfo}>
-                  <Text style={styles.languageName}>{language.name}</Text>
-                  <Text style={styles.languageNative}>{language.native}</Text>
-                </View>
-                <View style={styles.languageStats}>
-                  <Text style={styles.languageSpeakers}>
-                    {language.speakers}
-                  </Text>
-                  {currentLanguage.code === language.code && (
-                    <Text style={styles.selectedCheck}>✓</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1a1a2e" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>VoiceLoop</Text>
-          <Text style={styles.headerSubtitle}>
-            Powered by Gemma • Private & Offline • Voice Enabled
-          </Text>
-        </View>
-        <View style={styles.languageIndicator}>
-          <Text style={styles.languageText}>
-            {inputLanguage.native} → {outputLanguage.native}
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {/* Language Selection */}
-          <View style={styles.languageSelector}>
-            <TouchableOpacity
-              style={styles.languageButton}
-              onPress={() => setShowInputLanguageModal(true)}
-              disabled={isLoading}
-            >
-              <Text style={styles.languageLabel}>From</Text>
-              <Text style={styles.languageValue}>{inputLanguage.name}</Text>
-              <Text style={styles.languageNativeSmall}>
-                {inputLanguage.native}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.swapButton}
-              onPress={swapLanguages}
-              disabled={isLoading}
-            >
-              <Text style={styles.swapIcon}>⇄</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.languageButton}
-              onPress={() => setShowOutputLanguageModal(true)}
-              disabled={isLoading}
-            >
-              <Text style={styles.languageLabel}>To</Text>
-              <Text style={styles.languageValue}>{outputLanguage.name}</Text>
-              <Text style={styles.languageNativeSmall}>
-                {outputLanguage.native}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Input Section with Voice Recognition */}
-          <View style={styles.inputSection}>
-            <View style={styles.inputHeader}>
-              <Text style={styles.sectionTitle}>Enter Text</Text>
-              <View style={styles.inputHeaderRight}>
-                <Text style={styles.charCount}>{inputText.length}/500</Text>
-
-                {/* Voice Recognition Button */}
+  // Mirror Mode Layout
+  if (isMirrorMode) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.mirrorContainer}>
+          {/* Top Section (Flipped for Person Across) */}
+          <View style={[styles.mirrorSection, styles.mirrorTopSection]}>
+            <View style={styles.mirrorContent}>
+              {/* Language Label (Flipped) */}
+              <View style={[styles.languageLabel, styles.mirrorLanguageLabel]}>
                 <TouchableOpacity
                   style={[
-                    styles.voiceButton,
-                    isRecording && styles.voiceButtonActive,
-                    (!hasVoicePermission || !isVoiceAvailable) &&
-                      styles.voiceButtonDisabled,
+                    styles.ttsButton,
+                    isSpeakingOutput && styles.ttsButtonActive,
                   ]}
-                  onPressIn={startVoiceRecognition}
-                  onPressOut={stopVoiceRecognition}
+                  onPress={() =>
+                    speakText(
+                      translatedText,
+                      targetLanguage.code.split('-')[0],
+                      false,
+                    )
+                  }
                   disabled={
-                    !hasVoicePermission || !isVoiceAvailable || isLoading
+                    !translatedText ||
+                    translatedText.includes('❌') ||
+                    isSpeakingOutput
                   }
                 >
-                  <Text
-                    style={[
-                      styles.voiceIcon,
-                      isRecording && styles.voiceIconActive,
-                    ]}
-                  >
-                    {isRecording ? '🎤' : '🎙️'}
+                  <Text style={styles.ttsButtonIcon}>
+                    {isSpeakingOutput ? '🔊' : '🔈'}
                   </Text>
                 </TouchableOpacity>
 
-                {/* Input Text Speaker Button */}
+                <Text style={[styles.languageLabelText, styles.mirrorText]}>
+                  {targetLanguage.flag} {targetLanguage.native}
+                </Text>
+              </View>
+
+              {/* Translation Display (Flipped) */}
+              <ScrollView
+                style={styles.mirrorTextArea}
+                contentContainerStyle={styles.mirrorTextAreaContent}
+              >
+                {isTranslating ? (
+                  <TranslationLoadingAnimation />
+                ) : (
+                  <Text style={[styles.translatedText, styles.mirrorText]}>
+                    {translatedText || 'Translation appears here...'}
+                  </Text>
+                )}
+              </ScrollView>
+
+              {/* Action Buttons (Flipped) */}
+              <View style={[styles.mirrorActionButtons, styles.mirrorFlipped]}>
                 <TouchableOpacity
                   style={[
-                    styles.speakerButton,
-                    isSpeakingInput && styles.speakerButtonActive,
-                    (!isTtsInitialized || !inputText.trim()) &&
-                      styles.speakerButtonDisabled,
+                    styles.mirrorActionButton,
+                    styles.translateButton,
+                    isTranslating && styles.actionButtonDisabled,
+                    !inputText.trim() && styles.actionButtonDisabled,
                   ]}
-                  onPress={() => speakText(inputText, inputLanguage.code, true)}
-                  disabled={!isTtsInitialized || !inputText.trim() || isLoading}
+                  onPress={translateText}
+                  disabled={isTranslating || !inputText.trim()}
                 >
-                  <Text
-                    style={[
-                      styles.speakerIcon,
-                      isSpeakingInput && styles.speakerIconActive,
-                    ]}
-                  >
+                  <Text style={styles.actionButtonIcon}>
+                    {isTranslating ? '⏳' : '🔄'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.mirrorActionButton,
+                    styles.voiceButton,
+                    isListening && styles.voiceButtonActive,
+                    !hasAudioPermission && styles.actionButtonDisabled,
+                  ]}
+                  onPress={toggleListening}
+                  disabled={!hasAudioPermission}
+                >
+                  <Text style={styles.actionButtonIcon}>
+                    {isProcessingVoice ? '⏳' : isListening ? '🔴' : '🎙️'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Center Language Bar */}
+          <View style={styles.mirrorLanguageBar}>
+            <TouchableOpacity
+              style={styles.languageButton}
+              onPress={() => setShowSourceSelector(true)}
+            >
+              <Text style={styles.flagText}>{sourceLanguage.flag}</Text>
+              <Text style={styles.languageText}>{sourceLanguage.native}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.arrowButton}
+              onPress={swapLanguages}
+            >
+              <Text style={styles.arrowText}>⇅</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.languageButton}
+              onPress={() => setShowTargetSelector(true)}
+            >
+              <Text style={styles.flagText}>{targetLanguage.flag}</Text>
+              <Text style={styles.languageText}>{targetLanguage.native}</Text>
+            </TouchableOpacity>
+
+            {/* Mirror Mode Toggle */}
+            <TouchableOpacity
+              style={[styles.menuButton, styles.mirrorModeButton]}
+              onPress={toggleMirrorMode}
+            >
+              <Text style={styles.menuButtonText}>🔄</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Section (Normal for User) */}
+          <View style={[styles.mirrorSection, styles.mirrorBottomSection]}>
+            <View style={styles.mirrorContent}>
+              {/* Language Label */}
+              <View style={styles.languageLabel}>
+                <Text style={styles.languageLabelText}>
+                  {sourceLanguage.flag} {sourceLanguage.native}
+                </Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.ttsButton,
+                    isSpeakingInput && styles.ttsButtonActive,
+                  ]}
+                  onPress={() =>
+                    speakText(
+                      inputText,
+                      sourceLanguage.code.split('-')[0],
+                      true,
+                    )
+                  }
+                  disabled={!inputText.trim() || isSpeakingInput}
+                >
+                  <Text style={styles.ttsButtonIcon}>
                     {isSpeakingInput ? '🔊' : '🔈'}
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
 
-            {/* Live Speech Recognition Feedback */}
-            {(isRecording || partialSpeechText) && (
-              <View style={styles.speechFeedback}>
-                <Text style={styles.speechFeedbackText}>
-                  {isRecording ? '🎤 Listening...' : ''}
-                  {partialSpeechText ? ` "${partialSpeechText}"` : ''}
-                </Text>
-              </View>
-            )}
+              {/* Text Input */}
+              <TextInput
+                style={styles.mirrorTextInput}
+                placeholder="Enter text to translate..."
+                placeholderTextColor="#64748b"
+                value={inputText}
+                onChangeText={handleTextChange}
+                multiline={true}
+                textAlignVertical="top"
+              />
 
-            <TextInput
-              style={styles.textInput}
-              placeholder={`Type or speak in ${inputLanguage.name}...`}
-              placeholderTextColor="#666"
-              multiline={true}
-              maxLength={500}
-              value={inputText}
-              onChangeText={setInputText}
-              textAlignVertical="top"
-              editable={!isLoading}
-            />
-          </View>
-
-          {/* Translate Button */}
-          <TouchableOpacity
-            style={[
-              styles.translateButton,
-              (isLoading || !isModelInitialized) && styles.buttonDisabled,
-            ]}
-            onPress={translateText}
-            disabled={isLoading || !isModelInitialized}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.translateButtonText}>
-              {isLoading ? '🔄 Translating...' : '🌐 Translate'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Output Section */}
-          <View style={styles.outputSection}>
-            <View style={styles.outputHeader}>
-              <Text style={styles.sectionTitle}>Translation</Text>
-              {/* Output Text Speaker Button */}
-              <TouchableOpacity
-                style={[
-                  styles.speakerButton,
-                  isSpeakingOutput && styles.speakerButtonActive,
-                  (!isTtsInitialized ||
-                    !translatedText.trim() ||
-                    translatedText.includes('❌') ||
-                    translatedText.includes('🔄') ||
-                    translatedText.includes('Translation will appear here')) &&
-                    styles.speakerButtonDisabled,
-                ]}
-                onPress={() =>
-                  speakText(translatedText, outputLanguage.code, false)
-                }
-                disabled={
-                  !isTtsInitialized ||
-                  !translatedText.trim() ||
-                  isLoading ||
-                  translatedText.includes('❌') ||
-                  translatedText.includes('🔄') ||
-                  translatedText.includes('Translation will appear here')
-                }
-              >
-                <Text
+              {/* Action Buttons */}
+              <View style={styles.mirrorActionButtons}>
+                <TouchableOpacity
                   style={[
-                    styles.speakerIcon,
-                    isSpeakingOutput && styles.speakerIconActive,
+                    styles.mirrorActionButton,
+                    styles.translateButton,
+                    isTranslating && styles.actionButtonDisabled,
+                    !inputText.trim() && styles.actionButtonDisabled,
                   ]}
+                  onPress={translateText}
+                  disabled={isTranslating || !inputText.trim()}
                 >
-                  {isSpeakingOutput ? '🔊' : '🔈'}
-                </Text>
-              </TouchableOpacity>
+                  <Text style={styles.actionButtonIcon}>
+                    {isTranslating ? '⏳' : '🔄'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.mirrorActionButton,
+                    styles.voiceButton,
+                    isListening && styles.voiceButtonActive,
+                    !hasAudioPermission && styles.actionButtonDisabled,
+                  ]}
+                  onPress={toggleListening}
+                  disabled={!hasAudioPermission}
+                >
+                  <Text style={styles.actionButtonIcon}>
+                    {isProcessingVoice ? '⏳' : isListening ? '🔴' : '🎙️'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.mirrorActionButton, styles.clearButton]}
+                  onPress={clearAll}
+                >
+                  <Text style={styles.actionButtonIcon}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-
-            <View style={styles.outputBox}>
-              <ScrollView
-                style={styles.outputScrollView}
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.outputText}>
-                  {translatedText || 'Translation will appear here...'}
-                </Text>
-              </ScrollView>
-            </View>
-          </View>
-
-          {/* Control Buttons */}
-          <View style={styles.controlRow}>
-            <TouchableOpacity style={styles.controlButton} onPress={clearAll}>
-              <Text style={styles.controlButtonText}>🗑️ Clear</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={initializeModel}
-              disabled={isLoading}
-            >
-              <Text style={styles.controlButtonText}>🔄 Reload</Text>
-            </TouchableOpacity>
-
-            {/* Stop Speaking Button */}
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                (isSpeakingInput || isSpeakingOutput) &&
-                  styles.stopSpeakingButton,
-              ]}
-              onPress={stopSpeaking}
-              disabled={!isSpeakingInput && !isSpeakingOutput}
-            >
-              <Text style={styles.controlButtonText}>
-                {isSpeakingInput || isSpeakingOutput ? '🔇 Stop' : '🔇 Stop'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Status Indicator */}
-          {isLoading && (
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusText}>
-                {isModelInitialized
-                  ? 'Processing translation...'
-                  : 'Loading model...'}
-              </Text>
-            </View>
-          )}
-
-          {/* Model Status */}
-          <View style={styles.modelStatus}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isModelInitialized ? '#4ade80' : '#f87171' },
-              ]}
-            />
-            <Text style={styles.modelStatusText}>
-              {isModelInitialized
-                ? 'Translation Engine Ready'
-                : 'Engine Offline'}
-            </Text>
-
-            {/* TTS Status */}
-            <View
-              style={[
-                styles.statusDot,
-                {
-                  backgroundColor: isTtsInitialized ? '#4ade80' : '#f87171',
-                  marginLeft: 16,
-                },
-              ]}
-            />
-            <Text style={styles.modelStatusText}>
-              {isTtsInitialized ? 'TTS Ready' : 'TTS Offline'}
-            </Text>
-
-            {/* Voice Recognition Status */}
-            <View
-              style={[
-                styles.statusDot,
-                {
-                  backgroundColor:
-                    hasVoicePermission && isVoiceAvailable
-                      ? '#4ade80'
-                      : '#f87171',
-                  marginLeft: 16,
-                },
-              ]}
-            />
-            <Text style={styles.modelStatusText}>
-              {hasVoicePermission && isVoiceAvailable
-                ? 'Voice Ready'
-                : 'Voice Offline'}
-            </Text>
           </View>
         </View>
-      </ScrollView>
 
-      {/* Language Selection Modals */}
-      <LanguageModal
-        visible={showInputLanguageModal}
-        onClose={() => setShowInputLanguageModal(false)}
-        onSelect={selectInputLanguage}
-        title="Select Input Language"
-        currentLanguage={inputLanguage}
-      />
+        {/* Language Selection Modals */}
+        <Modal
+          visible={showSourceSelector}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowSourceSelector(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSourceSelector(false)}
+          >
+            <View style={styles.languageSelectorModal}>
+              <LanguageSelector
+                languages={languages}
+                selectedLanguage={sourceLanguage}
+                onSelect={handleSourceLanguageSelect}
+                title="Choose Source Language"
+                searchQuery={sourceSearchQuery}
+                onSearchChange={setSourceSearchQuery}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
-      <LanguageModal
-        visible={showOutputLanguageModal}
-        onClose={() => setShowOutputLanguageModal(false)}
-        onSelect={selectOutputLanguage}
-        title="Select Output Language"
-        currentLanguage={outputLanguage}
-      />
+        <Modal
+          visible={showTargetSelector}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowTargetSelector(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowTargetSelector(false)}
+          >
+            <View style={styles.languageSelectorModal}>
+              <LanguageSelector
+                languages={languages}
+                selectedLanguage={targetLanguage}
+                onSelect={handleTargetLanguageSelect}
+                title="Choose Target Language"
+                searchQuery={targetSearchQuery}
+                onSearchChange={setTargetSearchQuery}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Stop Speaking Button */}
+        {(isSpeakingInput || isSpeakingOutput) && (
+          <TouchableOpacity
+            style={styles.floatingStopButton}
+            onPress={stopSpeaking}
+          >
+            <Text style={styles.floatingStopButtonText}>🔇 Stop</Text>
+          </TouchableOpacity>
+        )}
+      </SafeAreaView>
+    );
+  }
+
+  // Normal Mode Layout
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Upper Half - Translation Output */}
+        <View style={styles.translationSection}>
+          <View style={styles.translationContainer}>
+            <View style={styles.languageLabel}>
+              <Text style={styles.languageLabelText}>
+                {targetLanguage.flag} {targetLanguage.native}
+              </Text>
+
+              {/* TTS Button for Output */}
+              {isTtsInitialized &&
+                translatedText &&
+                !translatedText.includes('❌') &&
+                !translatedText.includes('🔄') &&
+                !translatedText.includes('Translation') && (
+                  <TouchableOpacity
+                    style={[
+                      styles.ttsButton,
+                      isSpeakingOutput && styles.ttsButtonActive,
+                    ]}
+                    onPress={() =>
+                      speakText(
+                        translatedText,
+                        targetLanguage.code.split('-')[0],
+                        false,
+                      )
+                    }
+                    disabled={isSpeakingOutput}
+                  >
+                    <Text style={styles.ttsButtonIcon}>
+                      {isSpeakingOutput ? '🔊' : '🔈'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+            </View>
+            <ScrollView
+              style={styles.textArea}
+              contentContainerStyle={styles.textAreaContent}
+            >
+              {isTranslating ? (
+                <TranslationLoadingAnimation />
+              ) : (
+                <Text style={styles.translatedText}>
+                  {translatedText || 'Übersetzung erscheint hier...'}
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Middle Bar - Language Selection */}
+        <View style={styles.languageBar}>
+          {/* Source Language */}
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => setShowSourceSelector(true)}
+          >
+            <Text style={styles.flagText}>{sourceLanguage.flag}</Text>
+            <Text style={styles.languageText}>{sourceLanguage.native}</Text>
+          </TouchableOpacity>
+
+          {/* Arrow */}
+          <TouchableOpacity style={styles.arrowButton} onPress={swapLanguages}>
+            <Text style={styles.arrowText}>→</Text>
+          </TouchableOpacity>
+
+          {/* Target Language */}
+          <TouchableOpacity
+            style={styles.languageButton}
+            onPress={() => setShowTargetSelector(true)}
+          >
+            <Text style={styles.flagText}>{targetLanguage.flag}</Text>
+            <Text style={styles.languageText}>{targetLanguage.native}</Text>
+          </TouchableOpacity>
+
+          {/* Mirror Mode Toggle */}
+          <TouchableOpacity
+            style={[styles.menuButton, styles.mirrorModeButton]}
+            onPress={toggleMirrorMode}
+          >
+            <Text style={styles.menuButtonText}>👥</Text>
+          </TouchableOpacity>
+
+          {/* Menu Button */}
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setShowMenu(true)}
+          >
+            <Text style={styles.menuButtonText}>☰</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Lower Half - Text Input */}
+        <View style={styles.inputSection}>
+          <View style={styles.inputContainer}>
+            <View style={styles.languageLabel}>
+              <Text style={styles.languageLabelText}>
+                {sourceLanguage.flag} {sourceLanguage.native}
+              </Text>
+
+              {/* TTS Button for Input */}
+              {isTtsInitialized && inputText.trim() && (
+                <TouchableOpacity
+                  style={[
+                    styles.ttsButton,
+                    isSpeakingInput && styles.ttsButtonActive,
+                  ]}
+                  onPress={() =>
+                    speakText(
+                      inputText,
+                      sourceLanguage.code.split('-')[0],
+                      true,
+                    )
+                  }
+                  disabled={isSpeakingInput}
+                >
+                  <Text style={styles.ttsButtonIcon}>
+                    {isSpeakingInput ? '🔊' : '🔈'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Text zum Übersetzen eingeben..."
+                placeholderTextColor="#64748b"
+                value={inputText}
+                onChangeText={handleTextChange}
+                multiline={true}
+                textAlignVertical="top"
+              />
+
+              {/* Button Container - Stacked vertically */}
+              <View style={styles.buttonContainer}>
+                {/* Translate Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.translateButton,
+                    isTranslating && styles.actionButtonDisabled,
+                    !inputText.trim() && styles.actionButtonDisabled,
+                  ]}
+                  onPress={translateText}
+                  disabled={isTranslating || !inputText.trim()}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.actionButtonIcon}>
+                    {isTranslating ? '⏳' : '🔄'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Voice Input Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.voiceButton,
+                    isListening && styles.voiceButtonActive,
+                    isProcessingVoice && styles.voiceButtonProcessing,
+                    !hasAudioPermission && styles.actionButtonDisabled,
+                  ]}
+                  onPress={toggleListening}
+                  disabled={!hasAudioPermission}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.actionButtonIcon}>
+                    {isProcessingVoice ? '⏳' : isListening ? '🔴' : '🎙️'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Clear Button */}
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.clearButton]}
+                  onPress={clearAll}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.actionButtonIcon}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Language Selection Modals */}
+        <Modal
+          visible={showSourceSelector}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowSourceSelector(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSourceSelector(false)}
+          >
+            <View style={styles.languageSelectorModal}>
+              <LanguageSelector
+                languages={languages}
+                selectedLanguage={sourceLanguage}
+                onSelect={handleSourceLanguageSelect}
+                title="Ausgangssprache wählen"
+                searchQuery={sourceSearchQuery}
+                onSearchChange={setSourceSearchQuery}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        <Modal
+          visible={showTargetSelector}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowTargetSelector(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowTargetSelector(false)}
+          >
+            <View style={styles.languageSelectorModal}>
+              <LanguageSelector
+                languages={languages}
+                selectedLanguage={targetLanguage}
+                onSelect={handleTargetLanguageSelect}
+                title="Zielsprache wählen"
+                searchQuery={targetSearchQuery}
+                onSearchChange={setTargetSearchQuery}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Menu Modal */}
+        <MenuModal visible={showMenu} onClose={() => setShowMenu(false)} />
+
+        {/* Stop Speaking Button (floating if speaking) */}
+        {(isSpeakingInput || isSpeakingOutput) && (
+          <TouchableOpacity
+            style={styles.floatingStopButton}
+            onPress={stopSpeaking}
+          >
+            <Text style={styles.floatingStopButtonText}>🔇 Stop</Text>
+          </TouchableOpacity>
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -987,373 +1522,327 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f0f23',
   },
-  header: {
-    backgroundColor: '#1a1a2e',
-    paddingTop: 20,
-    paddingBottom: 25,
-    paddingHorizontal: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  headerContent: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: 0.5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  languageIndicator: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignSelf: 'center',
-  },
-  languageText: {
-    color: '#e2e8f0',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  scrollView: {
+
+  // LOADING SCREEN STYLES
+  loadingContainer: {
     flex: 1,
+    backgroundColor: '#0f0f23',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  content: {
-    padding: 24,
+
+  loadingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  languageSelector: {
+
+  loadingDots: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
+  },
+
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#64748b',
+    marginHorizontal: 4,
+  },
+
+  dot1: {
+    backgroundColor: '#3b82f6',
+  },
+
+  dot2: {
+    backgroundColor: '#8b5cf6',
+  },
+
+  dot3: {
+    backgroundColor: '#06b6d4',
+  },
+
+  loadingText: {
+    color: '#94a3b8',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+
+  // TRANSLATION LOADING ANIMATION
+  translationLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+
+  translationLoadingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  translationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#64748b',
+    marginHorizontal: 3,
+  },
+
+  translationDot1: {
+    backgroundColor: '#3b82f6',
+  },
+
+  translationDot2: {
+    backgroundColor: '#8b5cf6',
+  },
+
+  translationDot3: {
+    backgroundColor: '#06b6d4',
+  },
+
+  translationLoadingText: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // MIRROR MODE STYLES
+  mirrorContainer: {
+    flex: 1,
+    backgroundColor: '#0f0f23',
+  },
+
+  mirrorSection: {
+    flex: 1,
+    padding: 16,
+  },
+
+  mirrorTopSection: {
+    backgroundColor: '#1a1a2e',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+
+  mirrorBottomSection: {
+    backgroundColor: '#16213e',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+
+  mirrorContent: {
+    flex: 1,
     backgroundColor: '#16213e',
     borderRadius: 16,
+    padding: 16,
+  },
+
+  mirrorLanguageLabel: {
+    transform: [{ rotate: '180deg' }],
+  },
+
+  mirrorText: {
+    transform: [{ rotate: '180deg' }],
+  },
+
+  mirrorTextArea: {
+    flex: 1,
+    transform: [{ rotate: '180deg' }],
+  },
+
+  mirrorTextAreaContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+
+  mirrorTextInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 18,
+    lineHeight: 26,
+    textAlignVertical: 'top',
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+
+  mirrorActionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    paddingTop: 16,
+  },
+
+  mirrorFlipped: {
+    transform: [{ rotate: '180deg' }],
+  },
+
+  mirrorActionButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  mirrorLanguageBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f0f23',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#374151',
+    minHeight: 60,
+  },
+
+  mirrorModeButton: {
+    backgroundColor: '#8b5cf6',
+    marginLeft: 8,
+  },
+
+  // MAIN LAYOUT
+  translationSection: {
+    flex: 1,
+    backgroundColor: '#1a1a2e',
     padding: 20,
   },
-  languageButton: {
+
+  inputSection: {
     flex: 1,
+    backgroundColor: '#16213e',
+    padding: 20,
+  },
+
+  // LANGUAGE BAR (CENTER)
+  languageBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f0f23',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#374151',
+  },
+
+  languageButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    backgroundColor: '#374151',
+    minWidth: 80,
   },
-  languageLabel: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '600',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  languageValue: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  languageNativeSmall: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '500',
-  },
-  swapButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#3b82f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  swapIcon: {
+
+  flagText: {
     fontSize: 20,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  inputSection: {
-    marginBottom: 24,
-  },
-  inputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  inputHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  charCount: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '500',
-  },
-  // Voice Recognition Button Styles
-  voiceButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#4b5563',
-  },
-  voiceButtonActive: {
-    backgroundColor: '#dc2626',
-    borderColor: '#b91c1c',
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 4,
-    transform: [{ scale: 1.1 }],
-  },
-  voiceButtonDisabled: {
-    backgroundColor: '#1f2937',
-    borderColor: '#374151',
-    opacity: 0.5,
-  },
-  voiceIcon: {
-    fontSize: 16,
-    color: '#d1d5db',
-  },
-  voiceIconActive: {
-    color: '#ffffff',
-  },
-  // Speech Feedback Styles
-  speechFeedback: {
-    backgroundColor: 'rgba(220, 38, 38, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.3)',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  speechFeedbackText: {
-    color: '#dc2626',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  // TTS Speaker Button Styles
-  speakerButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#4b5563',
-  },
-  speakerButtonActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#2563eb',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  speakerButtonDisabled: {
-    backgroundColor: '#1f2937',
-    borderColor: '#374151',
-    opacity: 0.5,
-  },
-  speakerIcon: {
-    fontSize: 16,
-    color: '#d1d5db',
-  },
-  speakerIconActive: {
-    color: '#ffffff',
-  },
-  textInput: {
-    borderWidth: 2,
-    borderColor: '#334155',
-    borderRadius: 16,
-    padding: 20,
-    fontSize: 16,
-    backgroundColor: '#1e293b',
-    minHeight: 120,
-    color: '#ffffff',
-    textAlignVertical: 'top',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    fontFamily: 'System',
-  },
-  translateButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 18,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 32,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#475569',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  translateButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  outputSection: {
-    marginBottom: 24,
-  },
-  outputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  outputBox: {
-    borderWidth: 2,
-    borderColor: '#334155',
-    borderRadius: 16,
-    backgroundColor: '#1e293b',
-    minHeight: 120,
-    maxHeight: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  outputScrollView: {
-    padding: 20,
-  },
-  outputText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#e2e8f0',
-    fontFamily: 'System',
-  },
-  controlRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  controlButton: {
-    flex: 1,
-    backgroundColor: '#374151',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4b5563',
-  },
-  stopSpeakingButton: {
-    backgroundColor: '#dc2626',
-    borderColor: '#b91c1c',
-  },
-  controlButtonText: {
-    color: '#d1d5db',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
-    marginBottom: 16,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '600',
-  },
-  modelStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
     marginRight: 8,
   },
-  modelStatusText: {
-    fontSize: 12,
-    color: '#94a3b8',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+
+  languageText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  // Modal Styles
-  modalOverlay: {
+
+  arrowButton: {
+    marginHorizontal: 16,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+  },
+
+  arrowText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  menuButton: {
+    marginLeft: 8,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+
+  menuButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+  },
+
+  // TEXT AREAS
+  translationContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-end',
+    backgroundColor: '#16213e',
+    borderRadius: 16,
+    padding: 16,
   },
-  modalContent: {
+
+  inputContainer: {
+    flex: 1,
     backgroundColor: '#1a1a2e',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    paddingBottom: 20,
+    borderRadius: 16,
+    padding: 16,
   },
-  modalHeader: {
+
+  inputRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+
+  languageLabel: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    marginBottom: 12,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+
+  languageLabelText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  textArea: {
+    flex: 1,
+  },
+
+  textAreaContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+
+  translatedText: {
     color: '#ffffff',
+    fontSize: 18,
+    lineHeight: 26,
+    textAlign: 'center',
   },
-  closeButton: {
+
+  textInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 18,
+    lineHeight: 26,
+    textAlignVertical: 'top',
+    marginRight: 16,
+  },
+
+  // TTS BUTTON STYLES
+  ttsButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -1361,58 +1850,279 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonText: {
+
+  ttsButtonActive: {
+    backgroundColor: '#3b82f6',
+  },
+
+  ttsButtonIcon: {
+    fontSize: 16,
+    color: '#ffffff',
+  },
+
+  // BUTTON CONTAINER - Stacked vertically
+  buttonContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  // SHARED ACTION BUTTON STYLES
+  actionButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  actionButtonDisabled: {
+    backgroundColor: '#475569',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
+  actionButtonIcon: {
+    fontSize: 24,
+  },
+
+  // TRANSLATE BUTTON SPECIFIC
+  translateButton: {
+    backgroundColor: '#16a34a',
+    shadowColor: '#16a34a',
+  },
+
+  // VOICE BUTTON SPECIFIC
+  voiceButton: {
+    backgroundColor: '#dc2626',
+    shadowColor: '#dc2626',
+  },
+
+  voiceButtonActive: {
+    backgroundColor: '#ef4444',
+    shadowOpacity: 0.5,
+    transform: [{ scale: 1.05 }],
+  },
+
+  voiceButtonProcessing: {
+    backgroundColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+  },
+
+  // CLEAR BUTTON SPECIFIC
+  clearButton: {
+    backgroundColor: '#6b7280',
+    shadowColor: '#6b7280',
+  },
+
+  // FLOATING STOP BUTTON
+  floatingStopButton: {
+    position: 'absolute',
+    bottom: 30,
+    left: '50%',
+    transform: [{ translateX: -50 }],
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+
+  floatingStopButtonText: {
     color: '#ffffff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // MODAL STYLES
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // LANGUAGE SELECTOR MODAL
+  languageSelectorModal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    width: '90%',
+    height: '80%',
+    paddingVertical: 20,
+  },
+
+  languageSelectorContainer: {
+    flex: 1,
+  },
+
+  selectorTitle: {
+    color: '#ffffff',
+    fontSize: 18,
     fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
+
+  // SEARCH FUNCTIONALITY
+  searchContainer: {
+    position: 'relative',
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+
+  searchInput: {
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingRight: 40,
+    color: '#ffffff',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+
+  searchIcon: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    fontSize: 18,
+  },
+
   languageList: {
-    paddingHorizontal: 24,
+    flex: 1,
+    paddingHorizontal: 20,
   },
-  languageItem: {
+
+  languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 8,
     backgroundColor: '#16213e',
-    borderWidth: 1,
-    borderColor: 'transparent',
   },
-  languageItemSelected: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    borderColor: '#3b82f6',
+
+  selectedLanguageOption: {
+    backgroundColor: '#3b82f6',
   },
-  languageInfo: {
+
+  languageFlag: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+
+  languageTextContainer: {
     flex: 1,
   },
+
   languageName: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  selectedLanguageName: {
     color: '#ffffff',
-    marginBottom: 4,
   },
+
   languageNative: {
-    fontSize: 14,
     color: '#94a3b8',
-    fontWeight: '500',
+    fontSize: 14,
+    marginTop: 2,
   },
-  languageStats: {
-    alignItems: 'flex-end',
+
+  selectedLanguageNative: {
+    color: '#e0f2fe',
   },
-  languageSpeakers: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
+
   selectedCheck: {
-    fontSize: 16,
-    color: '#3b82f6',
+    color: '#ffffff',
+    fontSize: 18,
     fontWeight: 'bold',
+    marginLeft: 12,
+  },
+
+  // MENU MODAL
+  menuContainer: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    width: '85%',
+    maxHeight: '60%',
+  },
+
+  menuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+
+  menuTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+
+  closeButton: {
+    padding: 4,
+  },
+
+  closeButtonText: {
+    color: '#94a3b8',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+
+  menuItems: {
+    paddingVertical: 8,
+  },
+
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+
+  menuItemIcon: {
+    fontSize: 20,
+    marginRight: 16,
+    width: 24,
+    textAlign: 'center',
+  },
+
+  menuItemText: {
+    flex: 1,
+  },
+
+  menuItemTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+
+  menuItemSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
   },
 });
 
-export default App;
+export default VoiceLoopApp;
