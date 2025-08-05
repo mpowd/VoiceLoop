@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Alert,
   Vibration,
@@ -37,6 +37,76 @@ export const useTranslation = (
   const [accumulatedTranslation, setAccumulatedTranslation] = useState('');
 
   const translationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const eventEmitterRef = useRef<NativeEventEmitter | null>(null);
+  const responseListenerRef = useRef<any>(null);
+
+  // Setup global LLM response listener for normal mode
+  useEffect(() => {
+    if (GemmaLLM) {
+      eventEmitterRef.current = new NativeEventEmitter(GemmaLLM);
+
+      responseListenerRef.current = eventEmitterRef.current.addListener(
+        'llmResponse',
+        response => {
+          console.log('=== NORMAL MODE LLM RESPONSE RECEIVED ===');
+          console.log('Raw response:', JSON.stringify(response));
+
+          // Clear timeout on successful response
+          clearTranslationTimeout();
+
+          try {
+            let translationText = '';
+            if (typeof response === 'string') {
+              translationText = response;
+              setTranslatedText(translationText);
+              setIsTranslating(false);
+              return;
+            } else if (
+              response &&
+              (response.text !== undefined || response.message)
+            ) {
+              if (response.text !== undefined) {
+                translationText = response.text;
+              } else if (response.message) {
+                translationText = response.message;
+              }
+
+              if (!response.done && translationText) {
+                setAccumulatedTranslation(prev => {
+                  const newAccumulated = prev + translationText;
+                  setTranslatedText(newAccumulated);
+                  return newAccumulated;
+                });
+              } else if (response.done) {
+                setAccumulatedTranslation(prev => {
+                  const finalText = prev + translationText;
+                  setTranslatedText(finalText.trim());
+                  setIsTranslating(false);
+                  Vibration.vibrate(50);
+                  return '';
+                });
+              }
+            } else {
+              translationText = 'Translation received but format unknown';
+              setTranslatedText(translationText);
+              setIsTranslating(false);
+            }
+          } catch (error) {
+            console.error('Error processing normal response:', error);
+            setTranslatedText('Error processing translation');
+            setAccumulatedTranslation('');
+            setIsTranslating(false);
+          }
+        },
+      );
+    }
+
+    return () => {
+      if (responseListenerRef.current) {
+        responseListenerRef.current.remove();
+      }
+    };
+  }, []);
 
   // Clear any existing timeout
   const clearTranslationTimeout = () => {
@@ -123,7 +193,7 @@ ${text}`;
       if (typeof GemmaLLM.generateResponseAsync === 'function') {
         console.log('📤 Using generateResponseAsync');
 
-        // Set up listener for mirror mode translations
+        // Set up listener for mirror mode translations only
         if (isFromMirror) {
           const eventEmitter = new NativeEventEmitter(GemmaLLM);
 
