@@ -57,7 +57,7 @@ const TranslationLoading: React.FC = () => {
           style={[translationLoadingStyles.dot, translationLoadingStyles.dot3]}
         />
       </Animated.View>
-      <Text style={translationLoadingStyles.text}>Übersetze...</Text>
+      <Text style={translationLoadingStyles.text}>Translate...</Text>
     </View>
   );
 };
