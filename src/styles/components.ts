@@ -237,7 +237,7 @@ export const languageBarStyles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background.primary,
     paddingVertical: 16,
-    paddingHorizontal: 16, // Reduced from 20 to 16
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: colors.border.primary,
@@ -248,47 +248,47 @@ export const languageBarStyles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    marginHorizontal: 8, // Added margin to prevent overlap
+    marginHorizontal: 8,
   },
   languageButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 10, // Reduced from 12 to 10
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: colors.background.elevated,
-    minWidth: 75, // Reduced from 80 to 75
+    minWidth: 75,
   },
   flagText: {
-    fontSize: 18, // Reduced from 20 to 18
-    marginRight: 6, // Reduced from 8 to 6
+    fontSize: 18,
+    marginRight: 6,
   },
   languageText: {
     color: colors.text.primary,
-    fontSize: 13, // Reduced from 14 to 13
+    fontSize: 13,
     fontWeight: '600',
   },
   arrowButton: {
-    marginHorizontal: 12, // Reduced from 16 to 12
-    padding: 6, // Reduced from 8 to 6
+    marginHorizontal: 12,
+    padding: 6,
     borderRadius: 8,
     backgroundColor: colors.accent.blue,
   },
   arrowText: {
     color: colors.text.primary,
-    fontSize: 16, // Reduced from 18 to 16
+    fontSize: 16,
     fontWeight: 'bold',
   },
   menuButton: {
-    padding: 6, // Reduced from 8 to 6
+    padding: 6,
     borderRadius: 8,
     backgroundColor: colors.background.elevated,
-    minWidth: 36, // Reduced from 40 to 36
+    minWidth: 36,
     alignItems: 'center',
   },
   menuButtonText: {
     color: colors.text.primary,
-    fontSize: 16, // Reduced from 18 to 16
+    fontSize: 16,
   },
   mirrorModeButton: {
     backgroundColor: colors.accent.purple,
@@ -309,7 +309,9 @@ export const actionButtonStyles = StyleSheet.create({
     paddingTop: 16,
   },
   mirrorContainer: {
-    transform: [{ rotate: '180deg' }],
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
   },
   button: {
     width: 56,
@@ -353,7 +355,6 @@ export const actionButtonStyles = StyleSheet.create({
   },
 });
 
-// Text Area Styles
 export const textAreaStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -371,9 +372,19 @@ export const textAreaStyles = StyleSheet.create({
     marginBottom: 12,
   },
   mirrorLabel: {
-    transform: [{ rotate: '180deg' }],
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   languageLabelText: {
+    color: colors.text.tertiary,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  mirrorLabelText: {
     color: colors.text.tertiary,
     fontSize: 14,
     fontWeight: '600',
@@ -388,7 +399,19 @@ export const textAreaStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  mirrorButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.background.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   copyIcon: {
+    fontSize: 16,
+    color: colors.text.primary,
+  },
+  mirrorIcon: {
     fontSize: 16,
     color: colors.text.primary,
   },
@@ -411,11 +434,16 @@ export const textAreaStyles = StyleSheet.create({
     flex: 1,
   },
   mirrorScrollArea: {
-    transform: [{ rotate: '180deg' }],
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
+  },
+  mirrorScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   text: {
     color: colors.text.primary,
@@ -424,7 +452,10 @@ export const textAreaStyles = StyleSheet.create({
     textAlign: 'center',
   },
   mirrorText: {
-    transform: [{ rotate: '180deg' }],
+    color: colors.text.primary,
+    fontSize: 18,
+    lineHeight: 26,
+    textAlign: 'center',
   },
   textInput: {
     flex: 1,
@@ -440,7 +471,22 @@ export const textAreaStyles = StyleSheet.create({
     borderColor: colors.border.secondary,
   },
   mirrorTextInput: {
+    flex: 1,
+    color: colors.text.primary,
+    fontSize: 18,
+    lineHeight: 26,
+    textAlignVertical: 'top',
+    textAlign: 'center',
     backgroundColor: colors.background.secondary,
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border.secondary,
+  },
+  mirrorLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
@@ -463,11 +509,12 @@ export const layoutStyles = StyleSheet.create({
   inputRow: {
     flex: 1,
     flexDirection: 'row',
+    gap: 12,
   },
   buttonContainer: {
+    width: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
   },
   textInput: {
     flex: 1,
@@ -479,9 +526,9 @@ export const layoutStyles = StyleSheet.create({
   },
   floatingStopButton: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 100,
     left: '50%',
-    transform: [{ translateX: -50 }],
+    marginLeft: -40,
     backgroundColor: colors.accent.red,
     paddingHorizontal: 20,
     paddingVertical: 12,

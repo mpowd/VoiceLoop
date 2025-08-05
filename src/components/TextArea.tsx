@@ -63,14 +63,17 @@ const TextArea: React.FC<TextAreaProps> = ({
       <View style={labelStyle}>
         {/* Copy Button */}
         <TouchableOpacity
-          style={textAreaStyles.copyButton}
+          style={[
+            textAreaStyles.copyButton,
+            isMirror && textAreaStyles.mirrorButton,
+          ]}
           onPress={() => copyToClipboard(text)}
           disabled={!text.trim() || hasErrorIndicators(text)}
         >
           <Text
             style={[
               textAreaStyles.copyIcon,
-              isMirror && textAreaStyles.mirrorText,
+              isMirror && textAreaStyles.mirrorIcon,
             ]}
           >
             📋
@@ -80,7 +83,7 @@ const TextArea: React.FC<TextAreaProps> = ({
         <Text
           style={[
             textAreaStyles.languageLabelText,
-            isMirror && textAreaStyles.mirrorText,
+            isMirror && textAreaStyles.mirrorLabelText,
           ]}
         >
           {language.flag} {language.native}
@@ -92,6 +95,7 @@ const TextArea: React.FC<TextAreaProps> = ({
             style={[
               textAreaStyles.ttsButton,
               isSpeaking && textAreaStyles.ttsButtonActive,
+              isMirror && textAreaStyles.mirrorButton,
             ]}
             onPress={onSpeak}
             disabled={isSpeaking}
@@ -99,7 +103,7 @@ const TextArea: React.FC<TextAreaProps> = ({
             <Text
               style={[
                 textAreaStyles.ttsIcon,
-                isMirror && textAreaStyles.mirrorText,
+                isMirror && textAreaStyles.mirrorIcon,
               ]}
             >
               {isSpeaking ? '🔊' : '🔈'}
@@ -128,10 +132,17 @@ const TextArea: React.FC<TextAreaProps> = ({
             textAreaStyles.scrollArea,
             isMirror && textAreaStyles.mirrorScrollArea,
           ]}
-          contentContainerStyle={textAreaStyles.scrollContent}
+          contentContainerStyle={[
+            textAreaStyles.scrollContent,
+            isMirror && textAreaStyles.mirrorScrollContent,
+          ]}
         >
           {isTranslating ? (
-            <TranslationLoading />
+            <View
+              style={isMirror ? textAreaStyles.mirrorLoadingContainer : null}
+            >
+              <TranslationLoading />
+            </View>
           ) : (
             <Text style={textStyle}>
               {text || 'Translation appears here...'}
