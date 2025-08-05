@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Vibration } from 'react-native';
 
 // Components
@@ -18,24 +18,6 @@ const VoiceLoopApp: React.FC = () => {
   const gemmaModel = useGemmaModel();
   const appState = useAppState();
 
-  // Voice recognition callbacks
-  const voiceCallbacks = {
-    onTextUpdate: (text: string, isMirror = false) => {
-      if (isMirror) {
-        appState.setMirrorInputText(text);
-      } else {
-        translation.setInputText(text);
-      }
-    },
-    onFinalText: (text: string, isMirror = false) => {
-      if (isMirror) {
-        appState.setMirrorInputText(text);
-      } else {
-        translation.setInputText(text);
-      }
-    },
-  };
-
   // Translation callbacks
   const translationCallbacks = {
     onMirrorTranslationUpdate: (text: string) => {
@@ -47,12 +29,43 @@ const VoiceLoopApp: React.FC = () => {
     reloadModel: gemmaModel.loadGemmaModel,
   };
 
-  const voice = useVoiceRecognition(voiceCallbacks);
-  const tts = useTextToSpeech();
   const translation = useTranslation(
     gemmaModel.isModelReady,
     translationCallbacks,
   );
+
+  // Voice recognition callbacks - properly memoized functions
+  const onVoiceTextUpdate = useCallback(
+    (text: string, isMirror = false) => {
+      console.log('📝 Voice callback - onTextUpdate:', { text, isMirror });
+      if (isMirror) {
+        appState.setMirrorInputText(text);
+      } else {
+        translation.setInputText(text);
+      }
+    },
+    [translation.setInputText, appState.setMirrorInputText],
+  );
+
+  const onVoiceFinalText = useCallback(
+    (text: string, isMirror = false) => {
+      console.log('✅ Voice callback - onFinalText:', { text, isMirror });
+      if (isMirror) {
+        appState.setMirrorInputText(text);
+      } else {
+        translation.setInputText(text);
+      }
+    },
+    [translation.setInputText, appState.setMirrorInputText],
+  );
+
+  const voiceCallbacks = {
+    onTextUpdate: onVoiceTextUpdate,
+    onFinalText: onVoiceFinalText,
+  };
+
+  const voice = useVoiceRecognition(voiceCallbacks);
+  const tts = useTextToSpeech();
 
   // Show loading screen if model is not ready
   if (!gemmaModel.isModelReady) {

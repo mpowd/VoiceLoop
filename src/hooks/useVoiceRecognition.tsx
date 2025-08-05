@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Platform, PermissionsAndroid, Alert, Vibration } from 'react-native';
 import Voice from '@react-native-voice/voice';
 import { Language, VoiceState } from '../types';
@@ -25,6 +25,24 @@ export const useVoiceRecognition = (
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [isMirrorListening, setIsMirrorListening] = useState(false);
   const [isMirrorProcessingVoice, setIsMirrorProcessingVoice] = useState(false);
+
+  // Use refs to always have current values in event handlers
+  const isListeningRef = useRef(isListening);
+  const isMirrorListeningRef = useRef(isMirrorListening);
+  const callbacksRef = useRef(callbacks);
+
+  // Update refs when values change
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    isMirrorListeningRef.current = isMirrorListening;
+  }, [isMirrorListening]);
+
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
 
   // Request audio permission
   const requestAudioPermission = async () => {
@@ -54,10 +72,10 @@ export const useVoiceRecognition = (
 
       Voice.onSpeechEnd = () => {
         console.log('🛑 Speech ended - Processing...');
-        if (isListening) {
+        if (isListeningRef.current) {
           setIsProcessingVoice(true);
         }
-        if (isMirrorListening) {
+        if (isMirrorListeningRef.current) {
           setIsMirrorProcessingVoice(true);
         }
       };
@@ -71,10 +89,18 @@ export const useVoiceRecognition = (
           console.log('⏳ Partial text:', partialText);
 
           // Update the appropriate text field based on which microphone is active
-          if (isListening) {
-            callbacks.onTextUpdate(partialText, false);
-          } else if (isMirrorListening) {
-            callbacks.onTextUpdate(partialText, true);
+          if (isListeningRef.current) {
+            console.log(
+              '📝 Calling onTextUpdate for normal mode:',
+              partialText,
+            );
+            callbacksRef.current.onTextUpdate(partialText, false);
+          } else if (isMirrorListeningRef.current) {
+            console.log(
+              '📝 Calling onTextUpdate for mirror mode:',
+              partialText,
+            );
+            callbacksRef.current.onTextUpdate(partialText, true);
           }
         }
       };
@@ -87,10 +113,12 @@ export const useVoiceRecognition = (
           console.log('✅ Final recognized text:', spokenText);
 
           // Set final text to the appropriate field
-          if (isListening) {
-            callbacks.onFinalText(spokenText, false);
-          } else if (isMirrorListening) {
-            callbacks.onFinalText(spokenText, true);
+          if (isListeningRef.current) {
+            console.log('✅ Calling onFinalText for normal mode:', spokenText);
+            callbacksRef.current.onFinalText(spokenText, false);
+          } else if (isMirrorListeningRef.current) {
+            console.log('✅ Calling onFinalText for mirror mode:', spokenText);
+            callbacksRef.current.onFinalText(spokenText, true);
           }
 
           Vibration.vibrate(50);

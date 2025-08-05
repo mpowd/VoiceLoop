@@ -57,15 +57,10 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     
     @ReactMethod
     fun initializeModel(promise: Promise) {
-        Log.i(TAG, "=== GOOGLE-STYLE ASYNC MODEL INITIALIZATION ===")
+        Log.i(TAG, "=== CLEAN MODEL INITIALIZATION (NO STATUS EVENTS) ===")
         
         moduleScope.launch {
-            try {
-                // Send progress updates
-                withContext(Dispatchers.Main) {
-                    sendEvent("llmResponse", "🔍 Checking large model file...")
-                }
-                
+            try {           
                 val modelFile = File(modelPath)
                 if (!modelFile.exists()) {
                     withContext(Dispatchers.Main) {
@@ -75,25 +70,14 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
                 
                 val sizeMB = modelFile.length() / 1024 / 1024
-                Log.i(TAG, "Large model file: ${sizeMB}MB")
+                Log.i(TAG, "Large model file: ${sizeMB}MB (no status events sent)")
                 
-                withContext(Dispatchers.Main) {
-                    sendEvent("llmResponse", "📦 Large model detected: ${sizeMB}MB")
-                }
-                
-                // Memory cleanup before loading
-                withContext(Dispatchers.Main) {
-                    sendEvent("llmResponse", "🧹 Preparing memory...")
-                }
-                
-                // Force GC like Google project
+                // Memory cleanup before loading (silent)
                 System.gc()
-                delay(500) // Give GC time
+                delay(500)
                 System.gc()
                 
-                withContext(Dispatchers.Main) {
-                    sendEvent("llmResponse", "⚙️ Configuring model options...")
-                }
+                Log.i(TAG, "Configuring model options silently...")
                 
                 val options = LlmInferenceOptions.builder()
                     .setModelPath(modelPath)
@@ -101,11 +85,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     .setPreferredBackend(LlmInference.Backend.GPU)
                     .build()
                 
-                withContext(Dispatchers.Main) {
-                    sendEvent("llmResponse", "🚀 Loading large model... (30-60 seconds)")
-                }
-                
-                Log.i(TAG, "Creating LlmInference engine...")
+                Log.i(TAG, "Loading large model silently (no UI notifications)...")
                 val startTime = System.currentTimeMillis()
                 
                 llmInference = withContext(Dispatchers.IO) {
@@ -125,14 +105,14 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
                 val initTime = System.currentTimeMillis() - startTime
                 
-                Log.i(TAG, "✅ Large model initialized successfully in ${initTime}ms")
+                Log.i(TAG, "✅ Large model initialized successfully in ${initTime}ms (silent mode)")
                 
                 val result = Arguments.createMap().apply {
                     putString("modelPath", modelPath)
                     putDouble("modelSizeMB", sizeMB.toDouble())
                     putDouble("initTimeMs", initTime.toDouble())
-                    putString("status", "Large model initialized successfully")
-                    putString("architecture", "Google-style async loading")
+                    putString("status", "Model initialized successfully")
+                    putString("architecture", "Silent initialization")
                 }
                 
                 withContext(Dispatchers.Main) {
@@ -162,7 +142,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 Log.e(TAG, "❌ Large model initialization failed", e)
                 
                 withContext(Dispatchers.Main) {
-                    promise.reject("INIT_ERROR", "Google-style init failed: ${e.message}", e)
+                    promise.reject("INIT_ERROR", "Silent init failed: ${e.message}", e)
                 }
             }
         }
@@ -177,7 +157,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         
         moduleScope.launch {
             try {
-                Log.i(TAG, "Google-style async generation...")
+                Log.i(TAG, "Sync generation...")
                 
                 val startTime = System.currentTimeMillis()
                 
@@ -210,11 +190,17 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @ReactMethod 
     fun generateResponseAsync(prompt: String) {
         if (llmSession == null) {
-            sendEvent("llmError", "Model session not initialized")
+            val errorParams = Arguments.createMap().apply {
+                putString("text", "")
+                putBoolean("done", true)
+                putBoolean("error", true)
+                putString("errorMessage", "Model session not initialized")
+            }
+            sendEvent("llmResponse", errorParams)
             return
         }
         
-        Log.i(TAG, "Starting Google-style async streaming generation...")
+        Log.i(TAG, "Starting clean async streaming generation...")
         
         moduleScope.launch {
             try {
@@ -227,6 +213,8 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         val params = Arguments.createMap().apply {
                             putString("text", partialResult)
                             putBoolean("done", done)
+                            putBoolean("error", false)
+                            putString("type", "translation")
                         }
                         sendEvent("llmResponse", params)
                     }
@@ -234,7 +222,16 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Async generation failed", e)
-                sendEvent("llmError", "Async generation failed: ${e.message}")
+                
+                // Send structured error response
+                val errorParams = Arguments.createMap().apply {
+                    putString("text", "")
+                    putBoolean("done", true)
+                    putBoolean("error", true)
+                    putString("errorMessage", "Async generation failed: ${e.message}")
+                    putString("type", "error")
+                }
+                sendEvent("llmResponse", errorParams)
             }
         }
     }
@@ -242,7 +239,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @ReactMethod
     fun cleanup(promise: Promise) {
         try {
-            Log.i(TAG, "Google-style cleanup...")
+            Log.i(TAG, "Silent cleanup...")
             
             // Cancel coroutines
             moduleScope.coroutineContext.cancelChildren()
@@ -255,7 +252,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             
             System.gc()
             
-            Log.i(TAG, "✅ Google-style cleanup completed")
+            Log.i(TAG, "✅ Silent cleanup completed")
             promise.resolve("Cleaned up successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Cleanup failed", e)

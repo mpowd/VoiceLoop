@@ -27,24 +27,6 @@ export const useGemmaModel = (): GemmaModelHook => {
         throw new Error('GemmaLLM Native Module not found');
       }
 
-      // Setup event listeners first
-      const eventEmitter = new NativeEventEmitter(GemmaLLM);
-
-      const responseListener = eventEmitter.addListener(
-        'llmResponse',
-        response => {
-          console.log('=== LLM RESPONSE RECEIVED ===');
-          console.log('Raw response:', JSON.stringify(response));
-          // Note: Response handling will be done in useTranslation hook
-        },
-      );
-
-      const errorListener = eventEmitter.addListener('llmError', error => {
-        console.error('=== LLM ERROR ===');
-        console.error('Error:', error);
-        // Note: Error handling will be done in useTranslation hook
-      });
-
       // Check model availability first
       setLoadingMessage('🔍 Checking model availability...');
 
@@ -71,7 +53,6 @@ export const useGemmaModel = (): GemmaModelHook => {
 
       setLoadingMessage('🤖 Loading translation engine...');
 
-      // Initialize the model
       if (typeof GemmaLLM.initializeModel === 'function') {
         const result = await GemmaLLM.initializeModel();
         console.log('Model initialization result:', result);
@@ -81,7 +62,6 @@ export const useGemmaModel = (): GemmaModelHook => {
         console.log('🎯 Setting isModelReady = true');
         setIsModelReady(true);
       } else if (typeof GemmaLLM.loadModel === 'function') {
-        // Fallback to loadModel if initializeModel doesn't exist
         await GemmaLLM.loadModel();
         console.log('✅ Gemma model loaded successfully');
         setLoadingMessage('✅ Model ready!');
@@ -90,9 +70,6 @@ export const useGemmaModel = (): GemmaModelHook => {
       } else {
         throw new Error('No valid model loading function found');
       }
-
-      // Store listeners for cleanup
-      global.gemmaListeners = { responseListener, errorListener };
 
       // Add a small delay to ensure state is properly set
       setTimeout(() => {
@@ -103,7 +80,6 @@ export const useGemmaModel = (): GemmaModelHook => {
       console.error('❌ Failed to load Gemma model:', error);
       setLoadingMessage('❌ Model loading failed');
 
-      // Better error handling - show specific error but don't crash
       let errorMessage = 'Failed to load translation model';
       if ((error as Error).message.includes('not found')) {
         errorMessage = 'GemmaLLM module not properly installed';
@@ -128,7 +104,6 @@ export const useGemmaModel = (): GemmaModelHook => {
         ],
       );
 
-      // Set a fallback ready state so app doesn't stay on loading screen forever
       setTimeout(() => {
         console.log('🎯 Fallback setting isModelReady = true');
         setIsModelReady(true);
@@ -137,11 +112,7 @@ export const useGemmaModel = (): GemmaModelHook => {
   };
 
   const cleanup = () => {
-    // Cleanup event listeners if they exist
-    if (global.gemmaListeners) {
-      global.gemmaListeners.responseListener?.remove();
-      global.gemmaListeners.errorListener?.remove();
-    }
+    console.log('🧹 GemmaModel cleanup completed');
   };
 
   // Initialize on mount

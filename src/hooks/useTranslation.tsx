@@ -51,51 +51,106 @@ export const useTranslation = (
           console.log('=== NORMAL MODE LLM RESPONSE RECEIVED ===');
           console.log('Raw response:', JSON.stringify(response));
 
-          // Clear timeout on successful response
-          clearTranslationTimeout();
+          // Handle both formats: with type field AND without type field
+          if (typeof response === 'object') {
+            // NEW FORMAT: Has type field
+            if (response.type === 'translation') {
+              console.log(
+                '✅ Processing structured translation response (with type)',
+              );
 
-          try {
-            let translationText = '';
-            if (typeof response === 'string') {
-              translationText = response;
-              setTranslatedText(translationText);
-              setIsTranslating(false);
-              return;
-            } else if (
-              response &&
-              (response.text !== undefined || response.message)
-            ) {
-              if (response.text !== undefined) {
-                translationText = response.text;
-              } else if (response.message) {
-                translationText = response.message;
+              // Handle errors
+              if (response.error) {
+                console.error('Translation error:', response.errorMessage);
+                setTranslatedText(`❌ ${response.errorMessage}`);
+                setIsTranslating(false);
+                clearTranslationTimeout();
+                return;
               }
 
-              if (!response.done && translationText) {
-                setAccumulatedTranslation(prev => {
-                  const newAccumulated = prev + translationText;
-                  setTranslatedText(newAccumulated);
-                  return newAccumulated;
-                });
-              } else if (response.done) {
-                setAccumulatedTranslation(prev => {
-                  const finalText = prev + translationText;
-                  setTranslatedText(finalText.trim());
-                  setIsTranslating(false);
-                  Vibration.vibrate(50);
-                  return '';
-                });
+              // Clear timeout on successful response
+              clearTranslationTimeout();
+
+              try {
+                const translationText = response.text || '';
+
+                if (!response.done && translationText) {
+                  // Streaming partial result
+                  setAccumulatedTranslation(prev => {
+                    const newAccumulated = prev + translationText;
+                    setTranslatedText(newAccumulated);
+                    return newAccumulated;
+                  });
+                } else if (response.done) {
+                  // Final result
+                  setAccumulatedTranslation(prev => {
+                    const finalText = prev + translationText;
+                    setTranslatedText(finalText.trim());
+                    setIsTranslating(false);
+                    Vibration.vibrate(50);
+                    return '';
+                  });
+                }
+              } catch (error) {
+                console.error('Error processing translation response:', error);
+                setTranslatedText('Error processing translation');
+                setAccumulatedTranslation('');
+                setIsTranslating(false);
               }
-            } else {
-              translationText = 'Translation received but format unknown';
-              setTranslatedText(translationText);
-              setIsTranslating(false);
             }
-          } catch (error) {
-            console.error('Error processing normal response:', error);
-            setTranslatedText('Error processing translation');
-            setAccumulatedTranslation('');
-            setIsTranslating(false);
+            // CURRENT FORMAT: Has done field but no type (assume it's translation)
+            else if (response.done !== undefined && !response.type) {
+              console.log(
+                '✅ Processing legacy translation response (no type)',
+              );
+
+              // Clear timeout on successful response
+              clearTranslationTimeout();
+
+              try {
+                const translationText = response.text || '';
+
+                if (!response.done && translationText) {
+                  // Streaming partial result
+                  setAccumulatedTranslation(prev => {
+                    const newAccumulated = prev + translationText;
+                    setTranslatedText(newAccumulated);
+                    return newAccumulated;
+                  });
+                } else if (response.done) {
+                  // Final result
+                  setAccumulatedTranslation(prev => {
+                    const finalText = prev + translationText;
+                    setTranslatedText(finalText.trim());
+                    setIsTranslating(false);
+                    Vibration.vibrate(50);
+                    return '';
+                  });
+                }
+              } catch (error) {
+                console.error(
+                  'Error processing legacy translation response:',
+                  error,
+                );
+                setTranslatedText('Error processing translation');
+                setAccumulatedTranslation('');
+                setIsTranslating(false);
+              }
+            }
+            // ERROR FORMAT: Has type field with error
+            else if (response.type === 'error') {
+              console.error('Received error response:', response.errorMessage);
+              setTranslatedText(`❌ ${response.errorMessage}`);
+              setIsTranslating(false);
+              clearTranslationTimeout();
+            }
+            // IGNORE: Everything else
+            else {
+              console.log(
+                '🚫 Ignoring non-translation response:',
+                response.type || 'no-type',
+              );
+            }
           }
         },
       );
@@ -146,7 +201,7 @@ export const useTranslation = (
     // Clear previous timeout
     clearTranslationTimeout();
 
-    // Set a timeout to handle stuck translations - increased to 45 seconds
+    // Set a timeout to handle stuck translations
     const timeout = setTimeout(() => {
       console.log('⏰ Translation timeout - resetting state');
       setIsTranslating(false);
@@ -170,7 +225,7 @@ export const useTranslation = (
         ? sourceLanguage.name
         : targetLanguage.name;
 
-      // Improved prompt to prevent formatting issues
+      // Clean prompt for better translation quality
       const prompt = `Translate this text from ${sourceLanguageName} to ${targetLanguageName}. Return only the translation, no explanations or extra text:
 
 ${text}`;
@@ -184,14 +239,14 @@ ${text}`;
 
       setAccumulatedTranslation('');
       if (isFromMirror) {
-        callbacks.onMirrorTranslationUpdate(''); // Clear previous translation for loading animation
+        callbacks.onMirrorTranslationUpdate(''); // Clear for loading animation
       } else {
-        setTranslatedText(''); // Clear previous translation for loading animation
+        setTranslatedText(''); // Clear for loading animation
       }
 
-      // Use async method if available, otherwise fallback to sync
+      // Use async method (the new Kotlin module only supports async)
       if (typeof GemmaLLM.generateResponseAsync === 'function') {
-        console.log('📤 Using generateResponseAsync');
+        console.log('📤 Using generateResponseAsync (structured format)');
 
         // Set up listener for mirror mode translations only
         if (isFromMirror) {
@@ -202,34 +257,44 @@ ${text}`;
             response => {
               console.log('=== MIRROR LLM RESPONSE RECEIVED ===');
 
-              // Clear timeout on successful response
-              clearTranslationTimeout();
+              if (
+                typeof response === 'object' &&
+                response.type === 'translation'
+              ) {
+                console.log(
+                  '✅ Mirror: Processing structured translation response',
+                );
 
-              try {
-                let translationText = '';
-                if (typeof response === 'string') {
-                  translationText = response;
-                  callbacks.onMirrorTranslationComplete(translationText);
+                // Handle errors
+                if (response.error) {
+                  console.error(
+                    'Mirror translation error:',
+                    response.errorMessage,
+                  );
+                  callbacks.onMirrorTranslationComplete(
+                    `❌ ${response.errorMessage}`,
+                  );
                   setIsTranslating(false);
                   mirrorResponseListener.remove();
+                  clearTranslationTimeout();
                   return;
-                } else if (
-                  response &&
-                  (response.text !== undefined || response.message)
-                ) {
-                  if (response.text !== undefined) {
-                    translationText = response.text;
-                  } else if (response.message) {
-                    translationText = response.message;
-                  }
+                }
+
+                // Clear timeout on successful response
+                clearTranslationTimeout();
+
+                try {
+                  const translationText = response.text || '';
 
                   if (!response.done && translationText) {
+                    // Streaming partial result
                     setAccumulatedTranslation(prev => {
                       const newAccumulated = prev + translationText;
                       callbacks.onMirrorTranslationUpdate(newAccumulated);
                       return newAccumulated;
                     });
                   } else if (response.done) {
+                    // Final result
                     setAccumulatedTranslation(prev => {
                       const finalText = prev + translationText;
                       callbacks.onMirrorTranslationComplete(finalText.trim());
@@ -239,50 +304,45 @@ ${text}`;
                       return '';
                     });
                   }
+                } catch (error) {
+                  console.error('Error processing mirror translation:', error);
+                  callbacks.onMirrorTranslationComplete(
+                    'Error processing translation',
+                  );
+                  setAccumulatedTranslation('');
+                  setIsTranslating(false);
+                  mirrorResponseListener.remove();
                 }
-              } catch (error) {
-                console.error('Error processing mirror response:', error);
+              } else if (
+                typeof response === 'object' &&
+                response.type === 'error'
+              ) {
+                // Handle error responses
+                console.error('Mirror error response:', response.errorMessage);
                 callbacks.onMirrorTranslationComplete(
-                  'Error processing translation',
+                  `❌ ${response.errorMessage}`,
                 );
-                setAccumulatedTranslation('');
                 setIsTranslating(false);
                 mirrorResponseListener.remove();
+                clearTranslationTimeout();
+              } else {
+                // Ignore all other responses
+                console.log(
+                  '🚫 Mirror: Ignoring non-translation response:',
+                  response.type || 'unknown',
+                );
               }
             },
           );
         }
 
         GemmaLLM.generateResponseAsync(prompt);
-      } else if (typeof GemmaLLM.generateResponse === 'function') {
-        console.log('📤 Using generateResponse (sync)');
-        const response = await GemmaLLM.generateResponse(prompt);
-        console.log('✅ Gemma response:', response);
-
-        let cleanedTranslation = response.trim();
-        if (
-          cleanedTranslation.startsWith('"') &&
-          cleanedTranslation.endsWith('"')
-        ) {
-          cleanedTranslation = cleanedTranslation.slice(1, -1);
-        }
-
-        if (isFromMirror) {
-          callbacks.onMirrorTranslationComplete(cleanedTranslation);
-        } else {
-          setTranslatedText(cleanedTranslation);
-        }
-        setIsTranslating(false);
-
-        // Clear timeout on successful response
-        clearTranslationTimeout();
       } else {
-        throw new Error('No translation method available');
+        throw new Error('generateResponseAsync method not available');
       }
     } catch (error) {
       console.error('❌ Translation error:', error);
 
-      // Better error handling to prevent critical errors
       let errorMessage = 'Translation error occurred';
       if ((error as Error).message.includes('Async generation failed')) {
         errorMessage =
