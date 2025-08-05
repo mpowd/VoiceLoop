@@ -152,7 +152,7 @@ const NormalMode: React.FC<NormalModeProps> = ({
             <TextArea
               language={sourceLanguage}
               text={inputText}
-              placeholder="Text zum Übersetzen eingeben..."
+              placeholder="Enter text to translate..."
               isEditable={true}
               canSpeak={isTtsInitialized}
               isSpeaking={isSpeakingInput}
@@ -182,7 +182,7 @@ const NormalMode: React.FC<NormalModeProps> = ({
           visible={showSourceSelector}
           languages={languages}
           selectedLanguage={sourceLanguage}
-          title="Ausgangssprache wählen"
+          title="Select Source Language"
           searchQuery={sourceSearchQuery}
           onSelect={language => {
             onSourceLanguageSelect(language);
@@ -197,7 +197,7 @@ const NormalMode: React.FC<NormalModeProps> = ({
           visible={showTargetSelector}
           languages={languages}
           selectedLanguage={targetLanguage}
-          title="Zielsprache wählen"
+          title="Select Target Language"
           searchQuery={targetSearchQuery}
           onSelect={language => {
             onTargetLanguageSelect(language);

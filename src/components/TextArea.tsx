@@ -134,10 +134,7 @@ const TextArea: React.FC<TextAreaProps> = ({
             <TranslationLoading />
           ) : (
             <Text style={textStyle}>
-              {text ||
-                (isMirror
-                  ? 'Translation appears here...'
-                  : 'Übersetzung erscheint hier...')}
+              {text || 'Translation appears here...'}
             </Text>
           )}
         </ScrollView>
