@@ -18,6 +18,7 @@ const VoiceLoopApp: React.FC = () => {
   const gemmaModel = useGemmaModel();
   const appState = useAppState();
 
+  // Mirror mode state - simplified
   const [sourceInputText, setSourceInputText] = useState(''); // Person A input
   const [targetInputText, setTargetInputText] = useState(''); // Person B input
   const [sourceResultText, setSourceResultText] = useState(''); // Translation result for Person A
@@ -278,7 +279,6 @@ const VoiceLoopApp: React.FC = () => {
     appState.toggleMirrorMode();
     Vibration.vibrate(50);
 
-    // Clear all text when switching modes to avoid confusion
     translation.setInputText('');
     translation.setTranslatedText('');
     setSourceInputText('');

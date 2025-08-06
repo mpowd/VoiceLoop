@@ -41,9 +41,8 @@ export const useTranslation = (
   const eventEmitterRef = useRef<NativeEventEmitter | null>(null);
   const responseListenerRef = useRef<any>(null);
   const currentModeRef = useRef<'normal' | 'mirror'>('normal');
-  const translationCountRef = useRef(0);
 
-  // Setup UNIFIED LLM response listener
+  // Setup LLM response listener
   useEffect(() => {
     if (GemmaLLM) {
       eventEmitterRef.current = new NativeEventEmitter(GemmaLLM);
@@ -55,9 +54,7 @@ export const useTranslation = (
           console.log('Raw response:', JSON.stringify(response));
           console.log('Current mode:', currentModeRef.current);
 
-          // Handle both formats: with type field AND without type field
           if (typeof response === 'object') {
-            // NEW FORMAT: Has type field
             if (response.type === 'translation') {
               console.log('✅ Processing structured translation response');
 
@@ -66,17 +63,15 @@ export const useTranslation = (
                 console.error('Translation error:', response.errorMessage);
                 let errorMessage = `❌ Translation failed`;
 
-                // Check for context overflow
                 if (
                   response.errorMessage.includes('maxTokens') ||
                   response.errorMessage.includes('OUT_OF_RANGE') ||
                   response.errorMessage.includes('too long')
                 ) {
-                  errorMessage = '❌ Context full - restarting session...';
-                  // Reset model context
-                  setTimeout(() => {
-                    resetModelContext();
-                  }, 1000);
+                  errorMessage = '❌ Translation error - retrying...';
+                  console.log(
+                    '⚠️ Unexpected context overflow in isolated mode!',
+                  );
                 }
 
                 if (currentModeRef.current === 'mirror') {
@@ -154,17 +149,6 @@ export const useTranslation = (
               console.error('Received error response:', response.errorMessage);
               let errorMessage = `❌ Translation failed`;
 
-              if (
-                response.errorMessage.includes('maxTokens') ||
-                response.errorMessage.includes('OUT_OF_RANGE') ||
-                response.errorMessage.includes('too long')
-              ) {
-                errorMessage = '❌ Context full - restarting...';
-                setTimeout(() => {
-                  resetModelContext();
-                }, 1000);
-              }
-
               if (currentModeRef.current === 'mirror') {
                 callbacks.onMirrorTranslationComplete(errorMessage);
               } else {
@@ -192,7 +176,6 @@ export const useTranslation = (
     };
   }, [callbacks]);
 
-  // Clean translation text - remove pronunciation and extra formatting
   const cleanTranslationText = (text: string): string => {
     if (!text) return text;
 
@@ -209,16 +192,16 @@ export const useTranslation = (
     return cleaned;
   };
 
-  // Reset model context to prevent overflow
   const resetModelContext = async () => {
     try {
       console.log('🔄 Resetting model context...');
+
       if (GemmaLLM && typeof GemmaLLM.cleanup === 'function') {
         await GemmaLLM.cleanup();
       }
+
       // Reload the model
       await callbacks.reloadModel();
-      translationCountRef.current = 0;
       console.log('✅ Model context reset complete');
     } catch (error) {
       console.error('❌ Failed to reset model context:', error);
@@ -233,18 +216,16 @@ export const useTranslation = (
     }
   };
 
-  // Main translation function
   const translateText = async (
     text: string,
     sourceLanguage: Language,
     targetLanguage: Language,
     isFromMirror = false,
   ) => {
-    console.log('🔍 translateText called with:', {
-      text,
+    console.log('🔍 ISOLATED translateText called with:', {
+      text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
       isModelReady,
       isFromMirror,
-      translationCount: translationCountRef.current,
     });
 
     // Set current mode
@@ -262,15 +243,10 @@ export const useTranslation = (
       return;
     }
 
-    // Check if we need to reset context (after every 5 translations)
-    if (translationCountRef.current >= 5) {
-      console.log('🔄 Resetting context after 5 translations...');
-      await resetModelContext();
-    }
-
-    console.log('✅ Model is ready, proceeding with translation');
+    console.log(
+      '✅ Starting ISOLATED translation - no context issues possible',
+    );
     setIsTranslating(true);
-    translationCountRef.current++;
 
     // Clear previous timeout
     clearTranslationTimeout();
@@ -279,7 +255,7 @@ export const useTranslation = (
     const timeout = setTimeout(() => {
       console.log('⏰ Translation timeout - resetting state');
       setIsTranslating(false);
-      const timeoutMessage = '❌ Translation timed out. Resetting...';
+      const timeoutMessage = '❌ Translation timed out. Please try again.';
 
       if (currentModeRef.current === 'mirror') {
         callbacks.onMirrorTranslationComplete(timeoutMessage);
@@ -287,12 +263,7 @@ export const useTranslation = (
         setTranslatedText(timeoutMessage);
       }
       setAccumulatedTranslation('');
-
-      // Reset context on timeout
-      setTimeout(() => {
-        resetModelContext();
-      }, 1000);
-    }, 30000); // Reduced timeout to 30 seconds
+    }, 20000); // 20 seconds timeout
 
     translationTimeoutRef.current = timeout;
 
@@ -300,14 +271,37 @@ export const useTranslation = (
       const sourceLanguageName = sourceLanguage.name;
       const targetLanguageName = targetLanguage.name;
 
-      const prompt = `Translate to ${targetLanguageName}. Only return the translation in ${targetLanguageName}, no explanations, no pronunciation, no extra text:
+      console.log(
+        '🔄 Resetting session before translation for complete isolation...',
+      );
+      if (GemmaLLM && typeof GemmaLLM.resetSession === 'function') {
+        await GemmaLLM.resetSession();
+      } else {
+        console.log(
+          '⚠️ resetSession not available, falling back to cleanup...',
+        );
+        if (GemmaLLM && typeof GemmaLLM.cleanup === 'function') {
+          await GemmaLLM.cleanup();
+        }
+      }
 
-${text}`;
+      const prompt = `The following text was generated by speech recognition and may contain errors. Translate from ${sourceLanguageName} to ${targetLanguageName}:
 
-      console.log('🔄 Translating with Gemma (optimized prompt):', {
+"${text}"
+
+TRANSLATION PROCESS:
+1. First, identify and mentally correct any obvious speech recognition errors or typos
+2. Understand the overall context and intended meaning
+3. For ambiguous words, choose the meaning that best fits the context
+4. Translate the corrected and contextualized meaning to ${targetLanguageName}
+5. Preserve all specific details (times, dates, numbers) and maintain natural flow
+
+Provide only the accurate ${targetLanguageName} translation:`;
+
+      console.log('🔄 Performing ISOLATED translation:', {
         sourceLanguageName,
         targetLanguageName,
-        text,
+        textLength: text.length,
         isFromMirror,
         currentMode: currentModeRef.current,
         promptLength: prompt.length,
@@ -315,30 +309,25 @@ ${text}`;
 
       setAccumulatedTranslation('');
       if (isFromMirror) {
-        callbacks.onMirrorTranslationUpdate(''); // Clear for loading animation
       } else {
         setTranslatedText(''); // Clear for loading animation
       }
 
-      // Use async method
+      // STEP 3: Generate response with fresh session
       if (typeof GemmaLLM.generateResponseAsync === 'function') {
-        console.log('📤 Using generateResponseAsync (unified listener)');
+        console.log(
+          '📤 Using generateResponseAsync with fresh isolated session',
+        );
         GemmaLLM.generateResponseAsync(prompt);
       } else {
         throw new Error('generateResponseAsync method not available');
       }
     } catch (error) {
-      console.error('❌ Translation error:', error);
+      console.error('❌ Isolated translation error:', error);
 
-      let errorMessage = 'Translation error occurred';
+      let errorMessage = 'Translation error occurred. Please try again.';
       if ((error as Error).message.includes('Async generation failed')) {
-        errorMessage =
-          '❌ Translation service temporarily unavailable. Restarting...';
-        // Reset the model state to try to recover
-        console.log('🔄 Attempting to recover from critical error...');
-        setTimeout(() => {
-          resetModelContext();
-        }, 2000);
+        errorMessage = '❌ Translation service error. Please try again.';
       }
 
       if (currentModeRef.current === 'mirror') {

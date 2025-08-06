@@ -18,6 +18,9 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     
     private val moduleScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     
+    // Store session options for recreation
+    private var sessionOptions: LlmInferenceSession.LlmInferenceSessionOptions? = null
+    
     override fun getName(): String = "GemmaLLM"
     
     @ReactMethod
@@ -81,7 +84,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
                 val options = LlmInferenceOptions.builder()
                     .setModelPath(modelPath)
-                    .setMaxTokens(256)
+                    .setMaxTokens(2048)
                     .setPreferredBackend(LlmInference.Backend.GPU)
                     .build()
                 
@@ -94,13 +97,16 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
                 Log.i(TAG, "Creating LlmInferenceSession...")
                 
+                // Store session options for recreation
+                sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                    .setTopK(20)
+                    .setTopP(0.8f)
+                    .setTemperature(0.8f)
+                    .build()
+                
                 llmSession = LlmInferenceSession.createFromOptions(
                     llmInference!!,
-                    LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                        .setTopK(20)
-                        .setTopP(0.8f)
-                        .setTemperature(0.8f)
-                        .build()
+                    sessionOptions!!
                 )
                 
                 val initTime = System.currentTimeMillis() - startTime
@@ -128,6 +134,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     llmInference?.close()
                     llmSession = null
                     llmInference = null
+                    sessionOptions = null
                     System.gc()
                 } catch (cleanupError: Exception) {
                     Log.e(TAG, "Cleanup error", cleanupError)
@@ -195,12 +202,13 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 putBoolean("done", true)
                 putBoolean("error", true)
                 putString("errorMessage", "Model session not initialized")
+                putString("type", "error")
             }
             sendEvent("llmResponse", errorParams)
             return
         }
         
-        Log.i(TAG, "Starting clean async streaming generation...")
+        Log.i(TAG, "Starting isolated async streaming generation...")
         
         moduleScope.launch {
             try {
@@ -208,7 +216,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     llmSession!!.addQueryChunk(prompt)
                     
                     llmSession!!.generateResponseAsync { partialResult, done ->
-                        Log.d(TAG, "Partial result: done=$done, length=${partialResult.length}")
+                        Log.d(TAG, "Isolated result: done=$done, length=${partialResult.length}")
                         
                         val params = Arguments.createMap().apply {
                             putString("text", partialResult)
@@ -221,7 +229,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Async generation failed", e)
+                Log.e(TAG, "Isolated async generation failed", e)
                 
                 // Send structured error response
                 val errorParams = Arguments.createMap().apply {
@@ -237,9 +245,47 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
     
     @ReactMethod
+    fun resetSession(promise: Promise) {
+        Log.i(TAG, "🔄 Resetting session for isolated translation...")
+        
+        moduleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    // Close current session to clear context
+                    llmSession?.close()
+                    
+                    // Small delay to ensure cleanup
+                    delay(100)
+                    
+                    // Create fresh session with same options
+                    if (llmInference != null && sessionOptions != null) {
+                        llmSession = LlmInferenceSession.createFromOptions(
+                            llmInference!!,
+                            sessionOptions!!
+                        )
+                        Log.i(TAG, "✅ Fresh session created for isolated translation")
+                    } else {
+                        throw Exception("Cannot recreate session - missing inference or options")
+                    }
+                }
+                
+                withContext(Dispatchers.Main) {
+                    promise.resolve("Session reset successfully")
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Session reset failed", e)
+                withContext(Dispatchers.Main) {
+                    promise.reject("RESET_ERROR", "Session reset failed: ${e.message}", e)
+                }
+            }
+        }
+    }
+    
+    @ReactMethod
     fun cleanup(promise: Promise) {
         try {
-            Log.i(TAG, "Silent cleanup...")
+            Log.i(TAG, "Full cleanup (shutdown)...")
             
             // Cancel coroutines
             moduleScope.coroutineContext.cancelChildren()
@@ -250,9 +296,11 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             llmInference?.close()
             llmInference = null
             
+            sessionOptions = null
+            
             System.gc()
             
-            Log.i(TAG, "✅ Silent cleanup completed")
+            Log.i(TAG, "✅ Full cleanup completed")
             promise.resolve("Cleaned up successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Cleanup failed", e)
@@ -281,9 +329,13 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
     
     private fun sendEvent(eventName: String, data: Any?) {
-        reactApplicationContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit(eventName, data)
+        try {
+            reactApplicationContext
+                ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                ?.emit(eventName, data)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send event: $eventName", e)
+        }
     }
     
     override fun onCatalystInstanceDestroy() {
