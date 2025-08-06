@@ -12,9 +12,12 @@ interface MirrorModeProps {
   sourceLanguage: Language;
   targetLanguage: Language;
 
-  sourceText: string;
-  targetText: string;
-  lastTranslationDirection: 'source-to-target' | 'target-to-source' | null;
+  // Separate input and result texts
+  sourceInputText: string; // Person A input
+  targetInputText: string; // Person B input
+  sourceResultText: string; // Translation result for Person A
+  targetResultText: string; // Translation result for Person B
+
   isTranslating: boolean;
 
   isMirrorListening: boolean; // Target language (top)
@@ -34,15 +37,17 @@ interface MirrorModeProps {
   sourceSearchQuery: string;
   targetSearchQuery: string;
 
-  // Actions
-  onSourceTextChange: (text: string) => void;
-  onTargetTextChange: (text: string) => void;
+  // Actions - simplified
+  onSourceInputChange: (text: string) => void;
+  onTargetInputChange: (text: string) => void;
   onTranslateSource: () => void;
   onTranslateTarget: () => void;
   onSourceVoiceToggle: () => void;
   onTargetVoiceToggle: () => void;
-  onSpeakSource: () => void;
-  onSpeakTarget: () => void;
+  onSpeakSourceInput: () => void;
+  onSpeakTargetInput: () => void;
+  onSpeakSourceResult: () => void;
+  onSpeakTargetResult: () => void;
   onStopSpeaking: () => void;
   onClearAll: () => void;
 
@@ -66,9 +71,10 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
   targetLanguage,
 
   // Translation
-  sourceText,
-  targetText,
-  lastTranslationDirection,
+  sourceInputText,
+  targetInputText,
+  sourceResultText,
+  targetResultText,
   isTranslating,
 
   // Voice
@@ -89,15 +95,17 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
   sourceSearchQuery,
   targetSearchQuery,
 
-  // Actions - language-agnostic
-  onSourceTextChange,
-  onTargetTextChange,
+  // Actions - simplified
+  onSourceInputChange,
+  onTargetInputChange,
   onTranslateSource,
   onTranslateTarget,
   onSourceVoiceToggle,
   onTargetVoiceToggle,
-  onSpeakSource,
-  onSpeakTarget,
+  onSpeakSourceInput,
+  onSpeakTargetInput,
+  onSpeakSourceResult,
+  onSpeakTargetResult,
   onStopSpeaking,
   onClearAll,
 
@@ -114,7 +122,7 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
   onSourceSearchChange,
   onTargetSearchChange,
 }) => {
-  // Local state for view toggles
+  // View modes for each person
   const [partnerViewMode, setPartnerViewMode] = React.useState<
     'input' | 'result'
   >('input');
@@ -122,22 +130,20 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
     'input',
   );
 
-  // Auto-switch to result view when translation completes
+  // Auto-switch to result view when translation is available
   React.useEffect(() => {
-    if (lastTranslationDirection && !isTranslating) {
-      if (lastTranslationDirection === 'source-to-target') {
-        // Source was translated to target → show target result on top (partner side)
-        setPartnerViewMode('result');
-        // Keep user in input mode to continue source input
-        setUserViewMode('input');
-      } else if (lastTranslationDirection === 'target-to-source') {
-        // Target was translated to source → show source result on bottom (user side)
-        setUserViewMode('result');
-        // Keep partner in input mode to continue target input
-        setPartnerViewMode('input');
-      }
+    if (targetResultText && !isTranslating) {
+      // Person A translated to Person B → show result on top (Person B side)
+      setPartnerViewMode('result');
     }
-  }, [lastTranslationDirection, isTranslating]);
+  }, [targetResultText, isTranslating]);
+
+  React.useEffect(() => {
+    if (sourceResultText && !isTranslating) {
+      // Person B translated to Person A → show result on bottom (Person A side)
+      setUserViewMode('result');
+    }
+  }, [sourceResultText, isTranslating]);
 
   // Custom toggle switch component
   const ToggleSwitch = ({
@@ -194,9 +200,9 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
   return (
     <SafeAreaView style={mirrorStyles.container}>
       <View style={mirrorStyles.mainContainer}>
-        {/* Top Section (Partner's side - Target Language) - 180° rotated */}
+        {/* Top Section (Person B - Target Language) - 180° rotated */}
         <View style={[mirrorStyles.topSection, mirrorStyles.rotatedSection]}>
-          {/* Toggle Switch for Partner */}
+          {/* Toggle Switch for Person B */}
           <ToggleSwitch
             value={partnerViewMode}
             onToggle={setPartnerViewMode}
@@ -204,46 +210,41 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
           />
 
           <View style={mirrorStyles.contentRow}>
-            {/* TextArea for Target Language (partner side) */}
+            {/* TextArea for Person B */}
             {partnerViewMode === 'input' ? (
               <TextArea
                 language={targetLanguage}
-                text={targetText}
+                text={targetInputText}
                 placeholder={`Enter ${targetLanguage.name} text...`}
                 isEditable={true}
                 canSpeak={isTtsInitialized}
                 isSpeaking={isSpeakingInput}
-                onTextChange={onTargetTextChange}
-                onSpeak={onSpeakTarget}
+                onTextChange={onTargetInputChange}
+                onSpeak={onSpeakTargetInput}
                 isMirror={true}
               />
             ) : (
               <TextArea
                 language={targetLanguage}
-                text={
-                  lastTranslationDirection === 'source-to-target'
-                    ? targetText
-                    : ''
-                }
-                isTranslating={
-                  isTranslating &&
-                  lastTranslationDirection === 'source-to-target'
-                }
+                text={targetResultText}
+                placeholder="Translation appears here..."
+                isTranslating={isTranslating}
                 canSpeak={isTtsInitialized}
                 isSpeaking={isSpeakingOutput}
-                onSpeak={onSpeakTarget}
+                onSpeak={onSpeakTargetResult}
                 isMirror={true}
+                isEditable={false}
               />
             )}
 
-            {/* Action buttons for Target Language */}
+            {/* Action buttons for Person B */}
             <View style={mirrorStyles.actionButtonsContainer}>
               <ActionButtons
                 isTranslating={isTranslating}
                 isListening={isMirrorListening}
                 isProcessingVoice={isMirrorProcessingVoice}
                 hasAudioPermission={hasAudioPermission}
-                hasText={!!targetText.trim()}
+                hasText={!!targetInputText.trim()}
                 onTranslate={onTranslateTarget}
                 onVoiceToggle={onTargetVoiceToggle}
                 onClear={onClearAll}
@@ -266,50 +267,45 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
           onMenuPress={onMenuToggle}
         />
 
-        {/* Bottom Section (User's side - Source Language) */}
+        {/* Bottom Section (Person A - Source Language) */}
         <View style={mirrorStyles.bottomSection}>
-          {/* Toggle Switch for User */}
+          {/* Toggle Switch for Person A */}
           <ToggleSwitch value={userViewMode} onToggle={setUserViewMode} />
 
           <View style={mirrorStyles.contentRow}>
-            {/* TextArea for Source Language (user side) */}
+            {/* TextArea for Person A */}
             {userViewMode === 'input' ? (
               <TextArea
                 language={sourceLanguage}
-                text={sourceText}
+                text={sourceInputText}
                 placeholder={`Enter ${sourceLanguage.name} text...`}
                 isEditable={true}
                 canSpeak={isTtsInitialized}
                 isSpeaking={isSpeakingInput}
-                onTextChange={onSourceTextChange}
-                onSpeak={onSpeakSource}
+                onTextChange={onSourceInputChange}
+                onSpeak={onSpeakSourceInput}
               />
             ) : (
               <TextArea
                 language={sourceLanguage}
-                text={
-                  lastTranslationDirection === 'target-to-source'
-                    ? sourceText
-                    : ''
-                }
-                isTranslating={
-                  isTranslating &&
-                  lastTranslationDirection === 'target-to-source'
-                }
+                text={sourceResultText}
+                placeholder="Translation appears here..."
+                isTranslating={isTranslating}
                 canSpeak={isTtsInitialized}
                 isSpeaking={isSpeakingOutput}
-                onSpeak={onSpeakSource}
+                onSpeak={onSpeakSourceResult}
+                isEditable={false}
               />
             )}
 
-            {/* Action buttons for Source Language */}
+            {/* Action buttons for Person A */}
             <View style={mirrorStyles.actionButtonsContainer}>
               <ActionButtons
                 isTranslating={isTranslating}
                 isListening={isListening}
                 isProcessingVoice={isProcessingVoice}
                 hasAudioPermission={hasAudioPermission}
-                hasText={!!sourceText.trim()}
+                hasText={!!sourceInputText.trim()}
                 onTranslate={onTranslateSource}
                 onVoiceToggle={onSourceVoiceToggle}
                 onClear={onClearAll}

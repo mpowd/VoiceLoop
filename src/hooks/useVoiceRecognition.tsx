@@ -8,6 +8,8 @@ interface VoiceRecognitionHook extends VoiceState {
   isMirrorProcessingVoice: boolean;
   toggleListening: (language: Language) => Promise<void>;
   toggleMirrorListening: (language: Language) => Promise<void>;
+  stopListening: () => Promise<void>;
+  stopMirrorListening: () => Promise<void>;
   initializeVoice: () => Promise<void>;
   cleanup: () => void;
 }
@@ -30,6 +32,16 @@ export const useVoiceRecognition = (
   const isListeningRef = useRef(isListening);
   const isMirrorListeningRef = useRef(isMirrorListening);
   const callbacksRef = useRef(callbacks);
+  const currentLanguageRef = useRef<Language | null>(null);
+
+  // Text accumulation for continuous listening
+  const accumulatedTextRef = useRef<string>('');
+  const currentPartialTextRef = useRef<string>('');
+
+  // Auto-restart configuration
+  const autoRestartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoRestartingRef = useRef(false);
+  const RESTART_DELAY = 100; // Very short delay for immediate restart
 
   // Update refs when values change
   useEffect(() => {
@@ -43,6 +55,47 @@ export const useVoiceRecognition = (
   useEffect(() => {
     callbacksRef.current = callbacks;
   }, [callbacks]);
+
+  // Clear auto-restart timeout
+  const clearAutoRestart = () => {
+    if (autoRestartTimeoutRef.current) {
+      clearTimeout(autoRestartTimeoutRef.current);
+      autoRestartTimeoutRef.current = null;
+    }
+  };
+
+  // Restart voice recognition immediately
+  const restartVoiceRecognition = async () => {
+    if (!currentLanguageRef.current || isAutoRestartingRef.current) return;
+
+    isAutoRestartingRef.current = true;
+    console.log('🔄 Auto-restarting voice recognition...');
+
+    try {
+      await Voice.stop();
+
+      setTimeout(async () => {
+        try {
+          if (
+            currentLanguageRef.current &&
+            (isListeningRef.current || isMirrorListeningRef.current)
+          ) {
+            await Voice.start(currentLanguageRef.current.code);
+            console.log(
+              `✅ Voice restarted for ${currentLanguageRef.current.code}`,
+            );
+          }
+        } catch (error) {
+          console.log('⚠️ Failed to restart voice recognition:', error);
+        } finally {
+          isAutoRestartingRef.current = false;
+        }
+      }, RESTART_DELAY);
+    } catch (error) {
+      console.log('⚠️ Error during voice restart:', error);
+      isAutoRestartingRef.current = false;
+    }
+  };
 
   // Request audio permission
   const requestAudioPermission = async () => {
@@ -68,10 +121,15 @@ export const useVoiceRecognition = (
         console.log('🎤 Speech started');
         setIsProcessingVoice(false);
         setIsMirrorProcessingVoice(false);
+        clearAutoRestart();
+
+        // Reset current partial text for new speech segment
+        currentPartialTextRef.current = '';
       };
 
       Voice.onSpeechEnd = () => {
-        console.log('🛑 Speech ended - Processing...');
+        console.log('🛑 Speech ended - will process...');
+
         if (isListeningRef.current) {
           setIsProcessingVoice(true);
         }
@@ -82,25 +140,20 @@ export const useVoiceRecognition = (
 
       // Real-time transcription during speech
       Voice.onSpeechPartialResults = async e => {
-        console.log('📝 Partial speech results:', e.value);
-
         if (e.value && e.value.length > 0) {
           const partialText = e.value[0];
-          console.log('⏳ Partial text:', partialText);
+          currentPartialTextRef.current = partialText;
 
-          // Update the appropriate text field based on which microphone is active
+          // Combine accumulated text with current partial text
+          const combinedText = accumulatedTextRef.current
+            ? `${accumulatedTextRef.current} ${partialText}`.trim()
+            : partialText;
+
+          // Update the appropriate text field
           if (isListeningRef.current) {
-            console.log(
-              '📝 Calling onTextUpdate for normal mode:',
-              partialText,
-            );
-            callbacksRef.current.onTextUpdate(partialText, false);
+            callbacksRef.current.onTextUpdate(combinedText, false);
           } else if (isMirrorListeningRef.current) {
-            console.log(
-              '📝 Calling onTextUpdate for mirror mode:',
-              partialText,
-            );
-            callbacksRef.current.onTextUpdate(partialText, true);
+            callbacksRef.current.onTextUpdate(combinedText, true);
           }
         }
       };
@@ -112,13 +165,21 @@ export const useVoiceRecognition = (
           const spokenText = e.value[0];
           console.log('✅ Final recognized text:', spokenText);
 
-          // Set final text to the appropriate field
+          // Add the final text to accumulated text
+          if (accumulatedTextRef.current) {
+            accumulatedTextRef.current =
+              `${accumulatedTextRef.current} ${spokenText}`.trim();
+          } else {
+            accumulatedTextRef.current = spokenText;
+          }
+
+          console.log('📝 Total accumulated text:', accumulatedTextRef.current);
+
+          // Update with final accumulated text
           if (isListeningRef.current) {
-            console.log('✅ Calling onFinalText for normal mode:', spokenText);
-            callbacksRef.current.onFinalText(spokenText, false);
+            callbacksRef.current.onFinalText(accumulatedTextRef.current, false);
           } else if (isMirrorListeningRef.current) {
-            console.log('✅ Calling onFinalText for mirror mode:', spokenText);
-            callbacksRef.current.onFinalText(spokenText, true);
+            callbacksRef.current.onFinalText(accumulatedTextRef.current, true);
           }
 
           Vibration.vibrate(50);
@@ -126,21 +187,46 @@ export const useVoiceRecognition = (
 
         setIsProcessingVoice(false);
         setIsMirrorProcessingVoice(false);
-        // Stop automatically after final results
-        setIsListening(false);
-        setIsMirrorListening(false);
+
+        // Continue listening by restarting immediately
+        if (
+          (isListeningRef.current || isMirrorListeningRef.current) &&
+          currentLanguageRef.current
+        ) {
+          autoRestartTimeoutRef.current = setTimeout(() => {
+            restartVoiceRecognition();
+          }, RESTART_DELAY);
+        }
       };
 
       Voice.onSpeechError = e => {
-        console.log('⚠️ Voice error:', e.error);
-        setIsListening(false);
-        setIsMirrorListening(false);
+        console.log('⚠️ Voice error (silent):', e.error?.code);
+
         setIsProcessingVoice(false);
         setIsMirrorProcessingVoice(false);
 
-        if (e.error?.code !== '5') {
-          console.error('Voice error:', e.error);
+        const errorCode = e.error?.code;
+        const transientErrors = ['5', '6', '7', '8', '11', '12'];
+
+        if (transientErrors.includes(errorCode)) {
+          // Handle transient errors by restarting
+          if (
+            (isListeningRef.current || isMirrorListeningRef.current) &&
+            currentLanguageRef.current
+          ) {
+            console.log('🔄 Handling transient error, restarting...');
+            autoRestartTimeoutRef.current = setTimeout(() => {
+              restartVoiceRecognition();
+            }, 300);
+            return;
+          }
         }
+
+        // For other errors, stop completely
+        setIsListening(false);
+        setIsMirrorListening(false);
+        currentLanguageRef.current = null;
+        clearAutoRestart();
       };
     } catch (error) {
       console.error('Voice initialization failed:', error);
@@ -149,10 +235,7 @@ export const useVoiceRecognition = (
 
   // Toggle main microphone
   const toggleListening = async (language: Language) => {
-    console.log('🔄 Toggling voice recognition...', {
-      isListening,
-      isProcessingVoice,
-    });
+    console.log('🔄 Toggling voice recognition...', { isListening });
 
     if (!hasAudioPermission) {
       Alert.alert(
@@ -163,7 +246,7 @@ export const useVoiceRecognition = (
     }
 
     if (isProcessingVoice || isMirrorListening) {
-      console.log('⚠️ Still processing or mirror is active, please wait');
+      console.log('⚠️ Still processing or mirror is active');
       return;
     }
 
@@ -171,6 +254,13 @@ export const useVoiceRecognition = (
       // Stop listening
       try {
         console.log('🛑 Stopping voice recognition...');
+        clearAutoRestart();
+        currentLanguageRef.current = null;
+
+        // Clear accumulated text when manually stopping
+        accumulatedTextRef.current = '';
+        currentPartialTextRef.current = '';
+
         await Voice.stop();
         setIsListening(false);
       } catch (error) {
@@ -181,14 +271,21 @@ export const useVoiceRecognition = (
       // Start listening
       try {
         console.log('🚀 Starting voice recognition...');
+
+        // Clear accumulated text when manually starting
+        accumulatedTextRef.current = '';
+        currentPartialTextRef.current = '';
+
         setIsListening(true);
         setIsProcessingVoice(false);
+        currentLanguageRef.current = language;
 
         await Voice.start(language.code);
         console.log(`✅ Voice.start(${language.code}) successful`);
       } catch (error) {
         console.error('Error starting voice recognition:', error);
         setIsListening(false);
+        currentLanguageRef.current = null;
       }
     }
   };
@@ -197,7 +294,6 @@ export const useVoiceRecognition = (
   const toggleMirrorListening = async (language: Language) => {
     console.log('🔄 Toggling mirror voice recognition...', {
       isMirrorListening,
-      isMirrorProcessingVoice,
     });
 
     if (!hasAudioPermission) {
@@ -209,7 +305,7 @@ export const useVoiceRecognition = (
     }
 
     if (isMirrorProcessingVoice || isListening) {
-      console.log('⚠️ Still processing or main is active, please wait');
+      console.log('⚠️ Still processing or main is active');
       return;
     }
 
@@ -217,6 +313,13 @@ export const useVoiceRecognition = (
       // Stop listening
       try {
         console.log('🛑 Stopping mirror voice recognition...');
+        clearAutoRestart();
+        currentLanguageRef.current = null;
+
+        // Clear accumulated text when manually stopping
+        accumulatedTextRef.current = '';
+        currentPartialTextRef.current = '';
+
         await Voice.stop();
         setIsMirrorListening(false);
       } catch (error) {
@@ -224,23 +327,69 @@ export const useVoiceRecognition = (
         setIsMirrorListening(false);
       }
     } else {
-      // Start listening for target language (swapped for mirror)
+      // Start listening
       try {
         console.log('🚀 Starting mirror voice recognition...');
+
+        // Clear accumulated text when manually starting
+        accumulatedTextRef.current = '';
+        currentPartialTextRef.current = '';
+
         setIsMirrorListening(true);
         setIsMirrorProcessingVoice(false);
+        currentLanguageRef.current = language;
 
         await Voice.start(language.code);
         console.log(`✅ Mirror Voice.start(${language.code}) successful`);
       } catch (error) {
         console.error('Error starting mirror voice recognition:', error);
         setIsMirrorListening(false);
+        currentLanguageRef.current = null;
       }
+    }
+  };
+
+  // Manual stop functions (for use after translation)
+  const stopListening = async () => {
+    if (!isListening) return;
+
+    try {
+      console.log('🛑 Manually stopping voice recognition...');
+      clearAutoRestart();
+      currentLanguageRef.current = null;
+
+      await Voice.stop();
+      setIsListening(false);
+    } catch (error) {
+      console.error('Error manually stopping voice recognition:', error);
+      setIsListening(false);
+    }
+  };
+
+  const stopMirrorListening = async () => {
+    if (!isMirrorListening) return;
+
+    try {
+      console.log('🛑 Manually stopping mirror voice recognition...');
+      clearAutoRestart();
+      currentLanguageRef.current = null;
+
+      await Voice.stop();
+      setIsMirrorListening(false);
+    } catch (error) {
+      console.error('Error manually stopping mirror voice recognition:', error);
+      setIsMirrorListening(false);
     }
   };
 
   // Cleanup function
   const cleanup = () => {
+    clearAutoRestart();
+    currentLanguageRef.current = null;
+    accumulatedTextRef.current = '';
+    currentPartialTextRef.current = '';
+    isAutoRestartingRef.current = false;
+
     if (Voice && Voice.destroy) {
       Voice.destroy().catch(console.error);
     }
@@ -250,7 +399,6 @@ export const useVoiceRecognition = (
   useEffect(() => {
     requestAudioPermission();
     initializeVoice();
-
     return cleanup;
   }, []);
 
@@ -262,6 +410,8 @@ export const useVoiceRecognition = (
     isMirrorProcessingVoice,
     toggleListening,
     toggleMirrorListening,
+    stopListening,
+    stopMirrorListening,
     initializeVoice,
     cleanup,
   };

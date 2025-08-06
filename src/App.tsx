@@ -18,12 +18,10 @@ const VoiceLoopApp: React.FC = () => {
   const gemmaModel = useGemmaModel();
   const appState = useAppState();
 
-  // Mirror mode state - flexible for any two languages
-  const [sourceText, setSourceText] = useState('');
-  const [targetText, setTargetText] = useState('');
-  const [lastTranslationDirection, setLastTranslationDirection] = useState<
-    'source-to-target' | 'target-to-source' | null
-  >(null);
+  const [sourceInputText, setSourceInputText] = useState(''); // Person A input
+  const [targetInputText, setTargetInputText] = useState(''); // Person B input
+  const [sourceResultText, setSourceResultText] = useState(''); // Translation result for Person A
+  const [targetResultText, setTargetResultText] = useState(''); // Translation result for Person B
 
   // Translation callbacks for NORMAL mode
   const normalTranslationCallbacks = {
@@ -36,25 +34,27 @@ const VoiceLoopApp: React.FC = () => {
     reloadModel: gemmaModel.loadGemmaModel,
   };
 
+  // Track current translation direction
+  const [currentTranslationDirection, setCurrentTranslationDirection] =
+    useState<'source-to-target' | 'target-to-source' | null>(null);
+
   // Translation callbacks for MIRROR mode
   const mirrorTranslationCallbacks = {
     onMirrorTranslationUpdate: (text: string) => {
       console.log('🪞 Mirror translation update:', text);
-      // Update the target language text based on translation direction
-      if (lastTranslationDirection === 'source-to-target') {
-        setTargetText(text);
-      } else if (lastTranslationDirection === 'target-to-source') {
-        setSourceText(text);
-      }
     },
     onMirrorTranslationComplete: (text: string) => {
       console.log('🪞 Mirror translation complete:', text);
-      // Set the final translated text
-      if (lastTranslationDirection === 'source-to-target') {
-        setTargetText(text);
-      } else if (lastTranslationDirection === 'target-to-source') {
-        setSourceText(text);
+      // Set the result based on current translation direction
+      if (currentTranslationDirection === 'source-to-target') {
+        setTargetResultText(text);
+        console.log('✅ Translation result set for Person B (target):', text);
+      } else if (currentTranslationDirection === 'target-to-source') {
+        setSourceResultText(text);
+        console.log('✅ Translation result set for Person A (source):', text);
       }
+      // Reset direction
+      setCurrentTranslationDirection(null);
     },
     reloadModel: gemmaModel.loadGemmaModel,
   };
@@ -66,18 +66,17 @@ const VoiceLoopApp: React.FC = () => {
 
   const translation = useTranslation(gemmaModel.isModelReady, currentCallbacks);
 
-  // Voice recognition callbacks - language-specific
+  // Voice recognition callbacks
   const onVoiceTextUpdate = useCallback(
     (text: string, isMirror = false) => {
       console.log('📝 Voice callback - onTextUpdate:', { text, isMirror });
       if (appState.isMirrorMode) {
-        // In mirror mode, determine which language this is for
         if (isMirror) {
-          // This is from the partner's (top) microphone - target language
-          setTargetText(text);
+          // Person B (top) input
+          setTargetInputText(text);
         } else {
-          // This is from the user's (bottom) microphone - source language
-          setSourceText(text);
+          // Person A (bottom) input
+          setSourceInputText(text);
         }
       } else {
         translation.setInputText(text);
@@ -90,13 +89,12 @@ const VoiceLoopApp: React.FC = () => {
     (text: string, isMirror = false) => {
       console.log('✅ Voice callback - onFinalText:', { text, isMirror });
       if (appState.isMirrorMode) {
-        // In mirror mode, determine which language this is for
         if (isMirror) {
-          // This is from the partner's (top) microphone - target language
-          setTargetText(text);
+          // Person B (top) final input
+          setTargetInputText(text);
         } else {
-          // This is from the user's (bottom) microphone - source language
-          setSourceText(text);
+          // Person A (bottom) final input
+          setSourceInputText(text);
         }
       } else {
         translation.setInputText(text);
@@ -121,6 +119,7 @@ const VoiceLoopApp: React.FC = () => {
   // Action handlers for NORMAL mode
   const handleTranslate = () => {
     console.log('🔄 Normal mode translate:', translation.inputText);
+    voice.stopListening();
     translation.translateText(
       translation.inputText,
       appState.sourceLanguage,
@@ -129,32 +128,44 @@ const VoiceLoopApp: React.FC = () => {
     );
   };
 
-  // Action handlers for MIRROR mode - flexible for any languages
+  // Action handlers for MIRROR mode
   const handleMirrorTranslateSource = () => {
     console.log(
-      `🔄 Translating ${appState.sourceLanguage.name} to ${appState.targetLanguage.name}:`,
-      sourceText,
+      `🔄 Person A translating ${appState.sourceLanguage.name} to ${appState.targetLanguage.name}:`,
+      sourceInputText,
     );
-    setLastTranslationDirection('source-to-target');
+
+    voice.stopListening();
+
+    // Set translation direction before starting translation
+    setCurrentTranslationDirection('source-to-target');
+
+    // Start translation - result will be handled in callback
     translation.translateText(
-      sourceText,
-      appState.sourceLanguage, // FROM source language
-      appState.targetLanguage, // TO target language
-      true,
+      sourceInputText,
+      appState.sourceLanguage,
+      appState.targetLanguage,
+      true, // isFromMirror = true
     );
   };
 
   const handleMirrorTranslateTarget = () => {
     console.log(
-      `🔄 Translating ${appState.targetLanguage.name} to ${appState.sourceLanguage.name}:`,
-      targetText,
+      `🔄 Person B translating ${appState.targetLanguage.name} to ${appState.sourceLanguage.name}:`,
+      targetInputText,
     );
-    setLastTranslationDirection('target-to-source');
+
+    voice.stopMirrorListening();
+
+    // Set translation direction before starting translation
+    setCurrentTranslationDirection('target-to-source');
+
+    // Start translation - result will be handled in callback
     translation.translateText(
-      targetText,
-      appState.targetLanguage, // FROM target language
-      appState.sourceLanguage, // TO source language
-      true,
+      targetInputText,
+      appState.targetLanguage,
+      appState.sourceLanguage,
+      true, // isFromMirror = true
     );
   };
 
@@ -163,47 +174,74 @@ const VoiceLoopApp: React.FC = () => {
   };
 
   const handleMirrorVoiceToggleSource = () => {
-    // Source language voice recognition (bottom side)
+    // Person A voice recognition (bottom side)
     voice.toggleListening(appState.sourceLanguage);
   };
 
   const handleMirrorVoiceToggleTarget = () => {
-    // Target language voice recognition (top side)
+    // Person B voice recognition (top side)
     voice.toggleMirrorListening(appState.targetLanguage);
   };
 
   const handleSpeakInput = () => {
     const textToSpeak = appState.isMirrorMode
-      ? sourceText
+      ? sourceInputText
       : translation.inputText;
     const languageCode = appState.sourceLanguage.code.split('-')[0];
-
     tts.speakText(textToSpeak, languageCode, true);
   };
 
   const handleSpeakOutput = () => {
     const textToSpeak = appState.isMirrorMode
-      ? targetText
+      ? targetResultText
       : translation.translatedText;
     const languageCode = appState.targetLanguage.code.split('-')[0];
-
     tts.speakText(textToSpeak, languageCode, false);
   };
 
   const handleSpeakSource = () => {
-    tts.speakText(sourceText, appState.sourceLanguage.code.split('-')[0], true);
+    tts.speakText(
+      sourceInputText,
+      appState.sourceLanguage.code.split('-')[0],
+      true,
+    );
   };
 
   const handleSpeakTarget = () => {
-    tts.speakText(targetText, appState.targetLanguage.code.split('-')[0], true);
+    tts.speakText(
+      targetInputText,
+      appState.targetLanguage.code.split('-')[0],
+      true,
+    );
+  };
+
+  const handleSpeakSourceResult = () => {
+    tts.speakText(
+      sourceResultText,
+      appState.sourceLanguage.code.split('-')[0],
+      false,
+    );
+  };
+
+  const handleSpeakTargetResult = () => {
+    tts.speakText(
+      targetResultText,
+      appState.targetLanguage.code.split('-')[0],
+      false,
+    );
   };
 
   const handleClearAll = () => {
+    // Stop any active voice recognition
+    voice.stopListening();
+    voice.stopMirrorListening();
+
     if (appState.isMirrorMode) {
-      // Clear both language texts
-      setSourceText('');
-      setTargetText('');
-      setLastTranslationDirection(null);
+      // Clear all texts
+      setSourceInputText('');
+      setTargetInputText('');
+      setSourceResultText('');
+      setTargetResultText('');
     } else {
       translation.setInputText('');
       translation.setTranslatedText('');
@@ -215,10 +253,13 @@ const VoiceLoopApp: React.FC = () => {
     appState.swapLanguages();
 
     if (appState.isMirrorMode) {
-      // In mirror mode, swap the language texts
-      const tempText = sourceText;
-      setSourceText(targetText);
-      setTargetText(tempText);
+      // In mirror mode, swap all texts
+      const tempInput = sourceInputText;
+      const tempResult = sourceResultText;
+      setSourceInputText(targetInputText);
+      setSourceResultText(targetResultText);
+      setTargetInputText(tempInput);
+      setTargetResultText(tempResult);
     } else {
       // In normal mode, swap main translation texts
       const tempText = translation.inputText;
@@ -229,15 +270,22 @@ const VoiceLoopApp: React.FC = () => {
 
   const handleToggleMirrorMode = () => {
     console.log('🪞 Toggling mirror mode. Current:', appState.isMirrorMode);
+
+    // Stop all voice recognition before switching modes
+    voice.stopListening();
+    voice.stopMirrorListening();
+
     appState.toggleMirrorMode();
     Vibration.vibrate(50);
 
     // Clear all text when switching modes to avoid confusion
     translation.setInputText('');
     translation.setTranslatedText('');
-    setSourceText('');
-    setTargetText('');
-    setLastTranslationDirection(null);
+    setSourceInputText('');
+    setTargetInputText('');
+    setSourceResultText('');
+    setTargetResultText('');
+    setCurrentTranslationDirection(null);
   };
 
   const commonProps = {
@@ -274,8 +322,6 @@ const VoiceLoopApp: React.FC = () => {
 
     // UI Actions
     onMirrorModeToggle: handleToggleMirrorMode,
-    onMenuToggle: () => appState.setShowMenu(true),
-    onCloseMenu: () => appState.setShowMenu(false),
     onShowSourceSelector: appState.setShowSourceSelector,
     onShowTargetSelector: appState.setShowTargetSelector,
     onSourceSearchChange: appState.setSourceSearchQuery,
@@ -284,34 +330,38 @@ const VoiceLoopApp: React.FC = () => {
 
   // Render appropriate mode
   if (appState.isMirrorMode) {
-    console.log('🪞 Rendering Mirror Mode with flexible texts:', {
+    console.log('🪞 Rendering Mirror Mode with simplified texts:', {
       sourceLanguage: appState.sourceLanguage.name,
       targetLanguage: appState.targetLanguage.name,
-      sourceText: sourceText,
-      targetText: targetText,
-      lastDirection: lastTranslationDirection,
+      sourceInputText,
+      targetInputText,
+      sourceResultText,
+      targetResultText,
     });
 
     return (
       <MirrorMode
         {...commonProps}
-        // Mirror-specific props - now flexible for any languages
-        sourceText={sourceText}
-        targetText={targetText}
-        lastTranslationDirection={lastTranslationDirection}
+        // Mirror-specific props - simplified
+        sourceInputText={sourceInputText}
+        targetInputText={targetInputText}
+        sourceResultText={sourceResultText}
+        targetResultText={targetResultText}
         isMirrorListening={voice.isMirrorListening}
         isMirrorProcessingVoice={voice.isMirrorProcessingVoice}
         isListening={voice.isListening}
         isProcessingVoice={voice.isProcessingVoice}
-        // Mirror-specific actions - now language-agnostic
-        onSourceTextChange={setSourceText}
-        onTargetTextChange={setTargetText}
+        // Mirror-specific actions - simplified
+        onSourceInputChange={setSourceInputText}
+        onTargetInputChange={setTargetInputText}
         onTranslateSource={handleMirrorTranslateSource}
         onTranslateTarget={handleMirrorTranslateTarget}
         onSourceVoiceToggle={handleMirrorVoiceToggleSource}
         onTargetVoiceToggle={handleMirrorVoiceToggleTarget}
-        onSpeakSource={handleSpeakSource}
-        onSpeakTarget={handleSpeakTarget}
+        onSpeakSourceInput={handleSpeakSource}
+        onSpeakTargetInput={handleSpeakTarget}
+        onSpeakSourceResult={handleSpeakSourceResult}
+        onSpeakTargetResult={handleSpeakTargetResult}
       />
     );
   }

@@ -11,7 +11,6 @@ interface LanguageBarProps {
   onTargetLanguagePress: () => void;
   onSwapLanguages: () => void;
   onMirrorModeToggle: () => void;
-  onMenuPress: () => void;
 }
 
 const LanguageBar: React.FC<LanguageBarProps> = ({
@@ -22,7 +21,6 @@ const LanguageBar: React.FC<LanguageBarProps> = ({
   onTargetLanguagePress,
   onSwapLanguages,
   onMirrorModeToggle,
-  onMenuPress,
 }) => {
   return (
     <View style={languageBarStyles.container}>
@@ -71,14 +69,6 @@ const LanguageBar: React.FC<LanguageBarProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
-
-      {/* Menu Button (Right) */}
-      <TouchableOpacity
-        style={languageBarStyles.menuButton}
-        onPress={onMenuPress}
-      >
-        <Text style={languageBarStyles.menuButtonText}>☰</Text>
-      </TouchableOpacity>
     </View>
   );
 };
