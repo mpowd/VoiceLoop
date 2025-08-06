@@ -2,6 +2,16 @@
 
 **VoiceLoop** is a privacy-first, offline translation app powered by Google's Gemma 3n that enables seamless multilingual communication through both traditional single-user translation and a "Mirror Mode" for real-time face-to-face conversations between two people speaking different languages.
 
+## 📱 Quick Download
+
+**🚀 Want to try VoiceLoop immediately?**
+
+👉 **[Download APK from Releases](https://github.com/mpowd/voiceloop/releases/latest)**
+
+*Or build from source using the instructions below.*
+
+---
+
 ## 🌟 Key Features
 
 ### 🔄 Two Translation Modes
