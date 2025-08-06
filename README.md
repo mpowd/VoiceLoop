@@ -1,97 +1,169 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# VoiceLoop - on-device Translation App with Gemma 3n
 
-# Getting Started
+**VoiceLoop** is a privacy-first, offline translation app powered by Google's Gemma 3n that enables seamless multilingual communication through both traditional single-user translation and a "Mirror Mode" for real-time face-to-face conversations between two people speaking different languages.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## 🌟 Key Features
 
-## Step 1: Start Metro
+### 🔄 Two Translation Modes
+- **Normal Mode**: Traditional single-user translation interface
+- **Mirror Mode**: Face-to-face conversation interface where two people can interact naturally, with each person's interface optimally positioned for them
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+### 🛡️ Privacy-First Design
+- **100% Offline**: All processing happens on-device using Gemma 3n
+- **No Data Transmission**: Your conversations never leave your device
+- **Local AI**: Powered by Google's Gemma 3n running entirely on your Android device
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+### 🎙️ Multimodal Experience
+- **Real-time Voice Recognition**: Speech-to-text 
+- **Text-to-Speech**: Hear translations in natural voices
+- **Text Input**: Manual text entry with live editing
 
-```sh
-# Using npm
-npm start
+## 🏗️ Technical Architecture
 
-# OR using Yarn
-yarn start
+### Frontend (React Native + TypeScript)
+- **Component Architecture**: Modular React components with custom hooks
+- **State Management**: Centralized app state with optimized re-renders
+- **Platform Integration**: Deep Android integration for native performance
+
+### Backend (Native Android - Kotlin)
+- **MediaPipe Integration**: Direct integration with Google's MediaPipe LLM Inference
+- **Coroutine-based Processing**: Non-blocking async operations
+- **Memory Optimization**: Intelligent cleanup and garbage collection
+
+### AI Engine
+- **Gemma 3n Integration**: Local on-device inference
+- **Context Management**: Session isolation for accurate translations
+
+## 🚀 Installation & Setup
+
+### 1. Model Installation
+
+The app requires the Gemma 3n model file to be installed on your device at this specific location:
+```
+/data/local/tmp/llm/gemma3n.task
 ```
 
-## Step 2: Build and run your app
+#### Steps to install the model:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+1. **Download the model**: First, download the Gemma 3n `.task` file (e.g., from Kaggle)
 
-### Android
+2. **Install via ADB**: Use the following commands to install the model:
+   ```bash
+   # Remove existing model directory
+   adb shell rm -r /data/local/tmp/llm/
+   
+   # Create the model directory
+   adb shell mkdir -p /data/local/tmp/llm/
+   
+   # Push the model file to the device
+   adb push your_model.task /data/local/tmp/llm/gemma3n.task
+   ```
 
-```sh
-# Using npm
-npm run android
+### 2. Language Packages Setup
 
-# OR using Yarn
-yarn android
-```
+VoiceLoop uses Android's built-in Google speech recognition and text-to-speech engines. You need to download language packages for the languages you want to use:
 
-### iOS
+#### Speech-to-Text (STT) Language Packages:
+1. Go to **Settings** → **General Management** → **Google Voice Input**
+2. Select **Download Languages**
+3. Download the language packages you need
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+#### Text-to-Speech (TTS) Language Packages:
+1. Go to **Settings** → **General Management** → **Text-to-Speech**
+2. Select **Google Speech Recognition and Synthesis** → **Settings**
+3. Select **Install Voice Data**
+4. Download the language packages you need
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+### 3. App Installation
 
-```sh
-bundle install
-```
+1. Clone this repository
+2. Install dependencies: `npm install`
+3. Build the app: `npx react-native run-android`
 
-Then, and every time you update your native dependencies, run:
+## 🤔 Why Separate STT/TTS Modules?
 
-```sh
-bundle exec pod install
-```
+### Audio Modality Limitation in MediaPipe Android
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+An important architectural decision in VoiceLoop was to use separate offline STT (Speech-to-Text) and TTS (Text-to-Speech) modules instead of relying on Gemma 3n's native audio capabilities. Here's why:
 
-```sh
-# Using npm
-npm run ios
+**MediaPipe Audio Inference Status**: As of the development time, MediaPipe's audio inference APIs for Android are not yet available in the Maven repository. While the audio modality is implemented in MediaPipe v0.10.26 (available on GitHub), the `tasks-genai` package with audio support has not been published to Maven, making it impossible to integrate audio inference directly with Gemma 3n in Android applications.
 
-# OR using Yarn
-yarn ios
-```
+**Alternative Approaches Explored**:
+- ❌ **MediaPipe v0.10.26**: Not published to Maven; building from source proved complex
+- ❌ **LiteRT**: Requires `.tflite` files, which are not available for Gemma 3n
+- ❌ **LiteRT Next**: Also requires `.tflite` files
+- ❌ **LiteRT-LM**: No Kotlin/Android API support
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+**Our Solution**: Instead of waiting for MediaPipe's audio support, we implemented a robust architecture using:
+- **Google's built-in STT engine**: Leverages Android's native speech recognition
+- **Google's built-in TTS engine**: Uses Android's native text-to-speech synthesis
+- **Gemma 3n for translation**: Handles the core translation logic with text-to-text processing
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+This approach ensures:
+- ✅ **Immediate availability**: Works with current MediaPipe releases
+- ✅ **High-quality audio processing**: Uses Google's mature STT/TTS engines
+- ✅ **Offline functionality**: All components work without internet
+- ✅ **Optimal performance**: Each component is optimized for its specific task
 
-## Step 3: Modify your app
+## 🎯 Impact & Use Cases
 
-Now that you have successfully run the app, let's make changes!
+### Breaking Language Barriers
+- **Travel**: Communicate effortlessly in foreign countries
+- **Business**: Conduct international meetings without interpreters
+- **Education**: Learn languages through real conversations
+- **Healthcare**: Assist multilingual patients and healthcare providers
+- **Emergency Response**: Critical communication during emergencies
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+### Accessibility Features
+- **Offline Operation**: Works in areas with poor connectivity
+- **Privacy Protection**: Sensitive conversations stay on your device
+- **Real-time Processing**: Immediate translation for natural conversations
+- **Visual Feedback**: Clear UI indicators for all interaction states
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+## 🔧 Technical Specifications
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+### Supported Features
+- **Languages**: All languages supported by Gemma 3n
+- **Audio**: Real-time speech recognition and synthesis
+- **Performance**: Optimized for mobile devices
+- **Memory**: Intelligent context management
+- **UI**: Responsive design with mirror mode support
 
-## Congratulations! :tada:
+### System Requirements
+- Android 8.0+ (API level 26+)
+- 4GB+ RAM recommended
+- 2GB+ storage for model and language packages
+- Microphone and speakers for voice functionality
 
-You've successfully run and modified your React Native App. :partying_face:
+## 🏆 Gemma 3n Integration
 
-### Now what?
+VoiceLoop showcases Gemma 3n's unique capabilities:
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+- **On-Device Performance**: Leverages Gemma 3n's mobile-optimized architecture
+- **Privacy-First**: Utilizes local processing for sensitive conversations
+- **Real-time Processing**: Streaming translation with immediate feedback
+- **Memory Efficiency**: Optimized session management for mobile devices
+- **Multilingual Support**: Takes advantage of Gemma 3n's language capabilities
 
-# Troubleshooting
+## 🚀 Future Enhancements
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+- **Camera Integration**: Visual context for translations
+- **Conversation History**: Save and reference past translations
+- **Custom Vocabularies**: Specialized terminology support
+- **Group Conversations**: Multi-person translation support
+- **Audio Modality**: Direct integration once MediaPipe audio APIs are available
 
-# Learn More
+## 📄 License
 
-To learn more about React Native, take a look at the following resources:
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+## 🙏 Acknowledgments
+
+- Google AI Edge team for Gemma 3n and MediaPipe
+- React Native community for the excellent framework
+
+---
+
+**Built for the Google Gemma 3n Impact Challenge** 🌟
+
+*Empowering global communication through privacy-first, on-device AI translation.*
