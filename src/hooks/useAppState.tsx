@@ -34,6 +34,7 @@ interface AppStateHook extends MirrorState {
   setIsMirrorListening: (listening: boolean) => void;
   setIsMirrorProcessingVoice: (processing: boolean) => void;
   addChatMessage: (message: ChatMessage) => void;
+  updateChatMessage: (id: string, updates: Partial<ChatMessage>) => void;
   clearChatMessages: () => void;
   clearAllTexts: () => void;
 }
@@ -93,11 +94,30 @@ export const useAppState = (): AppStateHook => {
 
   // Add a chat message
   const addChatMessage = (message: ChatMessage) => {
+    console.log('📝 Adding chat message:', {
+      id: message.id,
+      role: message.role,
+      contentLength: message.content.length,
+    });
     setChatMessages(prev => [...prev, message]);
+  };
+
+  // Update a specific chat message by ID (for streaming)
+  const updateChatMessage = (id: string, updates: Partial<ChatMessage>) => {
+    console.log('🔄 Updating chat message:', {
+      id,
+      updates: Object.keys(updates),
+    });
+    setChatMessages(prev =>
+      prev.map(message =>
+        message.id === id ? { ...message, ...updates } : message,
+      ),
+    );
   };
 
   // Clear chat messages
   const clearChatMessages = () => {
+    console.log('🗑️ Clearing all chat messages');
     setChatMessages([]);
   };
 
@@ -147,6 +167,7 @@ export const useAppState = (): AppStateHook => {
     setIsMirrorListening,
     setIsMirrorProcessingVoice,
     addChatMessage,
+    updateChatMessage,
     clearChatMessages,
     clearAllTexts,
   };

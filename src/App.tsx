@@ -1,3 +1,5 @@
+// Updated VoiceLoopApp.tsx - Chat functionality with streaming
+
 import React, { useCallback, useState, useEffect } from 'react';
 import { Vibration, NativeModules, NativeEventEmitter } from 'react-native';
 
@@ -32,6 +34,10 @@ const VoiceLoopApp: React.FC = () => {
 
   // Chat mode state
   const [isChatGenerating, setIsChatGenerating] = useState(false);
+  const [currentStreamingMessageId, setCurrentStreamingMessageId] = useState<
+    string | null
+  >(null);
+  const [accumulatedText, setAccumulatedText] = useState<string>(''); // Sammelt die Tokens
 
   // Translation callbacks for NORMAL mode
   const normalTranslationCallbacks = {
@@ -121,10 +127,12 @@ const VoiceLoopApp: React.FC = () => {
   const voice = useVoiceRecognition(voiceCallbacks);
   const tts = useTextToSpeech();
 
-  // Chat functionality
+  // Chat functionality with streaming
   const handleSendChatMessage = useCallback(
     async (message: string) => {
       if (!message.trim() || isChatGenerating) return;
+
+      console.log('💬 Starting streaming chat response for:', message);
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -135,69 +143,141 @@ const VoiceLoopApp: React.FC = () => {
       };
       appState.addChatMessage(userMessage);
 
+      // Create placeholder assistant message for streaming
+      const assistantMessageId = (Date.now() + 1).toString();
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '', // Start with empty content
+        timestamp: new Date(),
+      };
+      appState.addChatMessage(assistantMessage);
+
       try {
         setIsChatGenerating(true);
+        setCurrentStreamingMessageId(assistantMessageId);
+        setAccumulatedText(''); // Reset accumulated text for new generation
 
         // Reset session for clean chat context
         if (GemmaLLM && typeof GemmaLLM.resetSession === 'function') {
           await GemmaLLM.resetSession();
         }
 
-        // Generate response using the Gemma model
-        if (GemmaLLM && typeof GemmaLLM.generateResponse === 'function') {
-          const response = await GemmaLLM.generateResponse(message);
-
-          // Add assistant response
-          const assistantMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: response,
-            timestamp: new Date(),
-          };
-          appState.addChatMessage(assistantMessage);
+        // Start streaming generation using async method
+        if (GemmaLLM && typeof GemmaLLM.generateResponseAsync === 'function') {
+          console.log('🚀 Starting async streaming generation...');
+          GemmaLLM.generateResponseAsync(message);
         } else {
-          throw new Error('Chat functionality not available');
+          throw new Error('Streaming functionality not available');
         }
       } catch (error) {
         console.error('❌ Chat generation failed:', error);
 
-        // Add error message
-        const errorMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
+        // Update the placeholder message with error
+        appState.updateChatMessage(assistantMessageId, {
           content:
             'Sorry, I encountered an error while processing your message. Please try again.',
-          timestamp: new Date(),
-        };
-        appState.addChatMessage(errorMessage);
-      } finally {
+        });
+
         setIsChatGenerating(false);
+        setCurrentStreamingMessageId(null);
+        setAccumulatedText(''); // Reset on error
       }
     },
     [isChatGenerating, appState],
   );
 
-  // Listen for async chat responses (if using streaming)
+  // Listen for streaming chat responses
   useEffect(() => {
     if (!GemmaLLM) return;
 
+    console.log('📡 Setting up streaming listener...');
     const eventEmitter = new NativeEventEmitter(GemmaLLM);
+
     const subscription = eventEmitter.addListener('llmResponse', data => {
-      if (appState.isChatMode && data.type === 'chat' && data.done) {
-        // Handle streaming chat response completion
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.text,
-          timestamp: new Date(),
-        };
-        appState.addChatMessage(assistantMessage);
+      console.log('📥 Received streaming data:', {
+        type: data.type,
+        done: data.done,
+        error: data.error,
+        textLength: data.text?.length || 0,
+        isChatMode: appState.isChatMode,
+        currentStreamingId: currentStreamingMessageId,
+      });
+
+      // Only handle chat responses when in chat mode
+      if (!appState.isChatMode || !currentStreamingMessageId) {
+        console.log('⏭️ Ignoring non-chat response');
+        return;
+      }
+
+      if (data.error) {
+        console.error('❌ Streaming error:', data.errorMessage);
+        appState.updateChatMessage(currentStreamingMessageId, {
+          content:
+            'Sorry, I encountered an error while generating the response. Please try again.',
+        });
         setIsChatGenerating(false);
+        setCurrentStreamingMessageId(null);
+        setAccumulatedText('');
+        return;
+      }
+
+      // Handle streaming text updates
+      if (data.text) {
+        let newAccumulatedText = '';
+
+        if (data.done) {
+          // Final complete response - use the full text
+          newAccumulatedText = data.text;
+          console.log(
+            '✅ Final complete response received:',
+            newAccumulatedText.slice(-50),
+          );
+        } else {
+          // Partial response - check if it's a delta (new token) or complete text so far
+          if (
+            data.text.length < accumulatedText.length ||
+            !accumulatedText.startsWith(data.text.slice(0, -10))
+          ) {
+            // This looks like a new token/delta, append it
+            newAccumulatedText = accumulatedText + data.text;
+            console.log('📝 Appending new token:', data.text);
+          } else {
+            // This looks like complete text so far, use it directly
+            newAccumulatedText = data.text;
+            console.log('📝 Using complete text:', data.text.slice(-20));
+          }
+        }
+
+        setAccumulatedText(newAccumulatedText);
+
+        // Update the streaming message with accumulated content
+        appState.updateChatMessage(currentStreamingMessageId, {
+          content: newAccumulatedText,
+        });
+      }
+
+      // Complete streaming when done
+      if (data.done) {
+        console.log('✅ Streaming completed!');
+        setIsChatGenerating(false);
+        setCurrentStreamingMessageId(null);
+        setAccumulatedText('');
       }
     });
 
-    return () => subscription.remove();
-  }, [appState.isChatMode, appState]);
+    return () => {
+      console.log('🔌 Removing streaming listener');
+      subscription.remove();
+    };
+  }, [
+    appState.isChatMode,
+    currentStreamingMessageId,
+    accumulatedText,
+    appState,
+  ]);
+
+  // ... [Rest of your existing handlers remain the same] ...
 
   // Show loading screen if model is not ready
   if (!gemmaModel.isModelReady) {
@@ -327,6 +407,10 @@ const VoiceLoopApp: React.FC = () => {
     if (appState.isChatMode) {
       // Clear chat messages
       appState.clearChatMessages();
+      // Stop any ongoing streaming
+      setIsChatGenerating(false);
+      setCurrentStreamingMessageId(null);
+      setAccumulatedText('');
     } else if (appState.isMirrorMode) {
       // Clear all texts
       setSourceInputText('');
@@ -385,6 +469,13 @@ const VoiceLoopApp: React.FC = () => {
     // Stop all voice recognition before switching modes
     voice.stopListening();
     voice.stopMirrorListening();
+
+    // Stop any ongoing streaming when leaving chat mode
+    if (appState.isChatMode) {
+      setIsChatGenerating(false);
+      setCurrentStreamingMessageId(null);
+      setAccumulatedText('');
+    }
 
     appState.toggleChatMode();
     Vibration.vibrate(50);

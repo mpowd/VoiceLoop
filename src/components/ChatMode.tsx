@@ -410,6 +410,15 @@ const chatStyles = {
     alignItems: 'center',
     paddingVertical: 8,
   },
+  typingText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginRight: 8,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   typingDot: {
     width: 6,
     height: 6,
