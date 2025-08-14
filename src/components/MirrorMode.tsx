@@ -58,6 +58,7 @@ interface MirrorModeProps {
 
   // UI Actions
   onMirrorModeToggle: () => void;
+  onChatModeToggle: () => void; // <-- Diese prop hinzugefügt
   onMenuToggle: () => void;
   onShowSourceSelector: (show: boolean) => void;
   onShowTargetSelector: (show: boolean) => void;
@@ -116,6 +117,7 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
 
   // UI Actions
   onMirrorModeToggle,
+  onChatModeToggle, // <-- Diese prop hinzugefügt
   onMenuToggle,
   onShowSourceSelector,
   onShowTargetSelector,
@@ -264,7 +266,7 @@ const MirrorMode: React.FC<MirrorModeProps> = ({
           onTargetLanguagePress={() => onShowTargetSelector(true)}
           onSwapLanguages={onSwapLanguages}
           onMirrorModeToggle={onMirrorModeToggle}
-          onMenuPress={onMenuToggle}
+          onChatModeToggle={onChatModeToggle}
         />
 
         {/* Bottom Section (Person A - Source Language) */}

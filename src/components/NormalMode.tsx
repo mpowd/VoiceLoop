@@ -59,6 +59,7 @@ interface NormalModeProps {
 
   // UI Actions
   onMirrorModeToggle: () => void;
+  onChatModeToggle: () => void; // <-- Diese prop hinzugefügt
   onMenuToggle: () => void;
   onCloseMenu: () => void;
   onShowSourceSelector: (show: boolean) => void;
@@ -110,6 +111,7 @@ const NormalMode: React.FC<NormalModeProps> = ({
 
   // UI Actions
   onMirrorModeToggle,
+  onChatModeToggle, // <-- Diese prop hinzugefügt
   onMenuToggle,
   onCloseMenu,
   onShowSourceSelector,
@@ -143,7 +145,7 @@ const NormalMode: React.FC<NormalModeProps> = ({
           onTargetLanguagePress={() => onShowTargetSelector(true)}
           onSwapLanguages={onSwapLanguages}
           onMirrorModeToggle={onMirrorModeToggle}
-          onMenuPress={onMenuToggle}
+          onChatModeToggle={onChatModeToggle}
         />
 
         {/* Lower Half - Text Input */}

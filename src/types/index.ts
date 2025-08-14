@@ -6,6 +6,14 @@ export interface Language {
   flag: string;
 }
 
+// Chat message interface
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
 // Voice recognition states
 export interface VoiceState {
   isListening: boolean;
@@ -38,8 +46,15 @@ export interface MirrorState {
   isMirrorProcessingVoice: boolean;
 }
 
+// Chat mode states
+export interface ChatState {
+  isChatMode: boolean;
+  chatMessages: ChatMessage[];
+  isChatGenerating: boolean;
+}
+
 // App main state
-export interface AppState extends TranslationState, VoiceState, TTSState, MirrorState {
+export interface AppState extends TranslationState, VoiceState, TTSState, MirrorState, ChatState {
   isModelReady: boolean;
   sourceLanguage: Language;
   targetLanguage: Language;

@@ -7,24 +7,73 @@ interface LanguageBarProps {
   sourceLanguage: Language;
   targetLanguage: Language;
   isMirrorMode?: boolean;
+  isChatMode?: boolean;
   onSourceLanguagePress: () => void;
   onTargetLanguagePress: () => void;
   onSwapLanguages: () => void;
   onMirrorModeToggle: () => void;
+  onChatModeToggle?: () => void;
 }
 
 const LanguageBar: React.FC<LanguageBarProps> = ({
   sourceLanguage,
   targetLanguage,
   isMirrorMode = false,
+  isChatMode = false,
   onSourceLanguagePress,
   onTargetLanguagePress,
   onSwapLanguages,
   onMirrorModeToggle,
+  onChatModeToggle,
 }) => {
+  // Chat Mode Layout - komplett andere Ansicht
+  if (isChatMode) {
+    return (
+      <View style={languageBarStyles.container}>
+        {/* Back to Translation Button (Links) */}
+        <TouchableOpacity
+          style={[
+            languageBarStyles.menuButton,
+            languageBarStyles.mirrorModeButton,
+          ]}
+          onPress={onChatModeToggle}
+        >
+          <Text style={languageBarStyles.menuButtonText}>←</Text>
+        </TouchableOpacity>
+
+        {/* Chat Mode Indicator (Mitte) */}
+        <View style={languageBarStyles.languagePairContainer}>
+          <View
+            style={[
+              languageBarStyles.languageButton,
+              { flex: 1, alignItems: 'center' },
+            ]}
+          >
+            <Text style={[languageBarStyles.flagText, { fontSize: 24 }]}>
+              💬
+            </Text>
+            <Text style={languageBarStyles.languageText}>Chat Assistant</Text>
+          </View>
+        </View>
+
+        {/* Placeholder (Rechts) */}
+        <View
+          style={[
+            languageBarStyles.menuButton,
+            languageBarStyles.mirrorModeButton,
+            { opacity: 0 },
+          ]}
+        >
+          <Text style={languageBarStyles.menuButtonText}> </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Normal Translation Mode Layout
   return (
     <View style={languageBarStyles.container}>
-      {/* Mirror Mode Toggle (Left) */}
+      {/* Mirror Mode Toggle (Links) */}
       <TouchableOpacity
         style={[
           languageBarStyles.menuButton,
@@ -32,10 +81,12 @@ const LanguageBar: React.FC<LanguageBarProps> = ({
         ]}
         onPress={onMirrorModeToggle}
       >
-        <Text style={languageBarStyles.menuButtonText}>👥</Text>
+        <Text style={languageBarStyles.menuButtonText}>
+          {isMirrorMode ? '🪞' : '👥'}
+        </Text>
       </TouchableOpacity>
 
-      {/* Language Pair (Center) */}
+      {/* Language Pair (Mitte) */}
       <View style={languageBarStyles.languagePairContainer}>
         {/* Source Language */}
         <TouchableOpacity
@@ -69,6 +120,17 @@ const LanguageBar: React.FC<LanguageBarProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Chat Mode Button (Rechts) - ersetzt Settings Button */}
+      <TouchableOpacity
+        style={[
+          languageBarStyles.menuButton,
+          languageBarStyles.mirrorModeButton,
+        ]}
+        onPress={onChatModeToggle}
+      >
+        <Text style={languageBarStyles.menuButtonText}>💬</Text>
+      </TouchableOpacity>
     </View>
   );
 };

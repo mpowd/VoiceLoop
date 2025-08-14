@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
-import { Vibration } from 'react-native';
+import React, { useCallback, useState, useEffect } from 'react';
+import { Vibration, NativeModules, NativeEventEmitter } from 'react-native';
 
 // Components
 import LoadingScreen from './components/LoadingScreen';
 import NormalMode from './components/NormalMode';
 import MirrorMode from './components/MirrorMode';
+import ChatMode from './components/ChatMode';
 
 // Hooks
 import { useGemmaModel } from './hooks/useGemmaModel';
@@ -12,6 +13,11 @@ import { useVoiceRecognition } from './hooks/useVoiceRecognition';
 import { useTextToSpeech } from './hooks/useTextToSpeech';
 import { useTranslation } from './hooks/useTranslation';
 import { useAppState } from './hooks/useAppState';
+
+// Types
+import { ChatMessage } from './types';
+
+const { GemmaLLM } = NativeModules;
 
 const VoiceLoopApp: React.FC = () => {
   // Initialize all hooks
@@ -23,6 +29,9 @@ const VoiceLoopApp: React.FC = () => {
   const [targetInputText, setTargetInputText] = useState(''); // Person B input
   const [sourceResultText, setSourceResultText] = useState(''); // Translation result for Person A
   const [targetResultText, setTargetResultText] = useState(''); // Translation result for Person B
+
+  // Chat mode state
+  const [isChatGenerating, setIsChatGenerating] = useState(false);
 
   // Translation callbacks for NORMAL mode
   const normalTranslationCallbacks = {
@@ -79,11 +88,11 @@ const VoiceLoopApp: React.FC = () => {
           // Person A (bottom) input
           setSourceInputText(text);
         }
-      } else {
+      } else if (!appState.isChatMode) {
         translation.setInputText(text);
       }
     },
-    [translation.setInputText, appState.isMirrorMode],
+    [translation.setInputText, appState.isMirrorMode, appState.isChatMode],
   );
 
   const onVoiceFinalText = useCallback(
@@ -97,11 +106,11 @@ const VoiceLoopApp: React.FC = () => {
           // Person A (bottom) final input
           setSourceInputText(text);
         }
-      } else {
+      } else if (!appState.isChatMode) {
         translation.setInputText(text);
       }
     },
-    [translation.setInputText, appState.isMirrorMode],
+    [translation.setInputText, appState.isMirrorMode, appState.isChatMode],
   );
 
   const voiceCallbacks = {
@@ -111,6 +120,84 @@ const VoiceLoopApp: React.FC = () => {
 
   const voice = useVoiceRecognition(voiceCallbacks);
   const tts = useTextToSpeech();
+
+  // Chat functionality
+  const handleSendChatMessage = useCallback(
+    async (message: string) => {
+      if (!message.trim() || isChatGenerating) return;
+
+      // Add user message
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: message,
+        timestamp: new Date(),
+      };
+      appState.addChatMessage(userMessage);
+
+      try {
+        setIsChatGenerating(true);
+
+        // Reset session for clean chat context
+        if (GemmaLLM && typeof GemmaLLM.resetSession === 'function') {
+          await GemmaLLM.resetSession();
+        }
+
+        // Generate response using the Gemma model
+        if (GemmaLLM && typeof GemmaLLM.generateResponse === 'function') {
+          const response = await GemmaLLM.generateResponse(message);
+
+          // Add assistant response
+          const assistantMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: response,
+            timestamp: new Date(),
+          };
+          appState.addChatMessage(assistantMessage);
+        } else {
+          throw new Error('Chat functionality not available');
+        }
+      } catch (error) {
+        console.error('❌ Chat generation failed:', error);
+
+        // Add error message
+        const errorMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content:
+            'Sorry, I encountered an error while processing your message. Please try again.',
+          timestamp: new Date(),
+        };
+        appState.addChatMessage(errorMessage);
+      } finally {
+        setIsChatGenerating(false);
+      }
+    },
+    [isChatGenerating, appState],
+  );
+
+  // Listen for async chat responses (if using streaming)
+  useEffect(() => {
+    if (!GemmaLLM) return;
+
+    const eventEmitter = new NativeEventEmitter(GemmaLLM);
+    const subscription = eventEmitter.addListener('llmResponse', data => {
+      if (appState.isChatMode && data.type === 'chat' && data.done) {
+        // Handle streaming chat response completion
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.text,
+          timestamp: new Date(),
+        };
+        appState.addChatMessage(assistantMessage);
+        setIsChatGenerating(false);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [appState.isChatMode, appState]);
 
   // Show loading screen if model is not ready
   if (!gemmaModel.isModelReady) {
@@ -237,7 +324,10 @@ const VoiceLoopApp: React.FC = () => {
     voice.stopListening();
     voice.stopMirrorListening();
 
-    if (appState.isMirrorMode) {
+    if (appState.isChatMode) {
+      // Clear chat messages
+      appState.clearChatMessages();
+    } else if (appState.isMirrorMode) {
       // Clear all texts
       setSourceInputText('');
       setTargetInputText('');
@@ -261,7 +351,7 @@ const VoiceLoopApp: React.FC = () => {
       setSourceResultText(targetResultText);
       setTargetInputText(tempInput);
       setTargetResultText(tempResult);
-    } else {
+    } else if (!appState.isChatMode) {
       // In normal mode, swap main translation texts
       const tempText = translation.inputText;
       translation.setInputText(translation.translatedText);
@@ -279,6 +369,7 @@ const VoiceLoopApp: React.FC = () => {
     appState.toggleMirrorMode();
     Vibration.vibrate(50);
 
+    // Clear all texts when switching modes
     translation.setInputText('');
     translation.setTranslatedText('');
     setSourceInputText('');
@@ -286,6 +377,28 @@ const VoiceLoopApp: React.FC = () => {
     setSourceResultText('');
     setTargetResultText('');
     setCurrentTranslationDirection(null);
+  };
+
+  const handleToggleChatMode = () => {
+    console.log('💬 Toggling chat mode. Current:', appState.isChatMode);
+
+    // Stop all voice recognition before switching modes
+    voice.stopListening();
+    voice.stopMirrorListening();
+
+    appState.toggleChatMode();
+    Vibration.vibrate(50);
+
+    // Clear translation texts when switching to chat mode
+    if (!appState.isChatMode) {
+      translation.setInputText('');
+      translation.setTranslatedText('');
+      setSourceInputText('');
+      setTargetInputText('');
+      setSourceResultText('');
+      setTargetResultText('');
+      setCurrentTranslationDirection(null);
+    }
   };
 
   const commonProps = {
@@ -322,13 +435,36 @@ const VoiceLoopApp: React.FC = () => {
 
     // UI Actions
     onMirrorModeToggle: handleToggleMirrorMode,
+    onChatModeToggle: handleToggleChatMode,
     onShowSourceSelector: appState.setShowSourceSelector,
     onShowTargetSelector: appState.setShowTargetSelector,
     onSourceSearchChange: appState.setSourceSearchQuery,
     onTargetSearchChange: appState.setTargetSearchQuery,
+    onMenuToggle: () => appState.setShowMenu(!appState.showMenu),
+    onCloseMenu: () => appState.setShowMenu(false),
   };
 
-  // Render appropriate mode
+  // Render Chat Mode
+  if (appState.isChatMode) {
+    console.log(
+      '💬 Rendering Chat Mode with messages:',
+      appState.chatMessages.length,
+    );
+
+    return (
+      <ChatMode
+        {...commonProps}
+        // Chat-specific props
+        messages={appState.chatMessages}
+        isGenerating={isChatGenerating}
+        // Chat-specific actions
+        onSendMessage={handleSendChatMessage}
+        onClearChat={appState.clearChatMessages}
+      />
+    );
+  }
+
+  // Render Mirror Mode
   if (appState.isMirrorMode) {
     console.log('🪞 Rendering Mirror Mode with simplified texts:', {
       sourceLanguage: appState.sourceLanguage.name,
@@ -366,6 +502,7 @@ const VoiceLoopApp: React.FC = () => {
     );
   }
 
+  // Render Normal Mode
   console.log('📱 Rendering Normal Mode with texts:', {
     input: translation.inputText,
     translated: translation.translatedText,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Language, MirrorState } from '../types';
+import { Language, MirrorState, ChatMessage } from '../types';
 import { languages } from '../utils/languages';
 
 interface AppStateHook extends MirrorState {
@@ -14,11 +14,16 @@ interface AppStateHook extends MirrorState {
   sourceSearchQuery: string;
   targetSearchQuery: string;
 
+  // Chat state
+  isChatMode: boolean;
+  chatMessages: ChatMessage[];
+
   // Actions
   setSourceLanguage: (language: Language) => void;
   setTargetLanguage: (language: Language) => void;
   swapLanguages: () => void;
   toggleMirrorMode: () => void;
+  toggleChatMode: () => void;
   setShowMenu: (show: boolean) => void;
   setShowSourceSelector: (show: boolean) => void;
   setShowTargetSelector: (show: boolean) => void;
@@ -28,6 +33,8 @@ interface AppStateHook extends MirrorState {
   setMirrorTranslatedText: (text: string) => void;
   setIsMirrorListening: (listening: boolean) => void;
   setIsMirrorProcessingVoice: (processing: boolean) => void;
+  addChatMessage: (message: ChatMessage) => void;
+  clearChatMessages: () => void;
   clearAllTexts: () => void;
 }
 
@@ -50,6 +57,10 @@ export const useAppState = (): AppStateHook => {
   const [isMirrorListening, setIsMirrorListening] = useState(false);
   const [isMirrorProcessingVoice, setIsMirrorProcessingVoice] = useState(false);
 
+  // Chat mode state
+  const [isChatMode, setIsChatMode] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
   // Swap languages and their texts
   const swapLanguages = () => {
     const temp = sourceLanguage;
@@ -65,12 +76,36 @@ export const useAppState = (): AppStateHook => {
   // Toggle mirror mode
   const toggleMirrorMode = () => {
     setIsMirrorMode(!isMirrorMode);
+    // Disable chat mode when enabling mirror mode
+    if (!isMirrorMode) {
+      setIsChatMode(false);
+    }
+  };
+
+  // Toggle chat mode
+  const toggleChatMode = () => {
+    setIsChatMode(!isChatMode);
+    // Disable mirror mode when enabling chat mode
+    if (!isChatMode) {
+      setIsMirrorMode(false);
+    }
+  };
+
+  // Add a chat message
+  const addChatMessage = (message: ChatMessage) => {
+    setChatMessages(prev => [...prev, message]);
+  };
+
+  // Clear chat messages
+  const clearChatMessages = () => {
+    setChatMessages([]);
   };
 
   // Clear all texts
   const clearAllTexts = () => {
     setMirrorInputText('');
     setMirrorTranslatedText('');
+    setChatMessages([]);
   };
 
   return {
@@ -92,11 +127,16 @@ export const useAppState = (): AppStateHook => {
     isMirrorListening,
     isMirrorProcessingVoice,
 
+    // Chat state
+    isChatMode,
+    chatMessages,
+
     // Actions
     setSourceLanguage,
     setTargetLanguage,
     swapLanguages,
     toggleMirrorMode,
+    toggleChatMode,
     setShowMenu,
     setShowSourceSelector,
     setShowTargetSelector,
@@ -106,6 +146,8 @@ export const useAppState = (): AppStateHook => {
     setMirrorTranslatedText,
     setIsMirrorListening,
     setIsMirrorProcessingVoice,
+    addChatMessage,
+    clearChatMessages,
     clearAllTexts,
   };
 };
