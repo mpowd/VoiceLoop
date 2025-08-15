@@ -19,7 +19,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     private val moduleScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     
     // Store session options for recreation
-    private var sessionOptions: LlmInferenceSession.LlmInferenceSessionOptions? = null
+    private var baseSessionOptions: LlmInferenceSession.LlmInferenceSessionOptions? = null
     
     override fun getName(): String = "GemmaLLM"
     
@@ -84,7 +84,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
                 val options = LlmInferenceOptions.builder()
                     .setModelPath(modelPath)
-                    .setMaxTokens(2048)
+                    .setMaxTokens(4096) // Increased for longer conversations
                     .setPreferredBackend(LlmInference.Backend.GPU)
                     .build()
                 
@@ -97,16 +97,16 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 
                 Log.i(TAG, "Creating LlmInferenceSession...")
                 
-                // Store session options for recreation
-                sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                // Store base session options for recreation
+                baseSessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
                     .setTopK(20)
                     .setTopP(0.8f)
-                    .setTemperature(0.8f)
+                    .setTemperature(0.8f) // Default temperature
                     .build()
                 
                 llmSession = LlmInferenceSession.createFromOptions(
                     llmInference!!,
-                    sessionOptions!!
+                    baseSessionOptions!!
                 )
                 
                 val initTime = System.currentTimeMillis() - startTime
@@ -134,7 +134,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     llmInference?.close()
                     llmSession = null
                     llmInference = null
-                    sessionOptions = null
+                    baseSessionOptions = null
                     System.gc()
                 } catch (cleanupError: Exception) {
                     Log.e(TAG, "Cleanup error", cleanupError)
@@ -208,7 +208,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return
         }
         
-        Log.i(TAG, "Starting isolated async streaming generation...")
+        Log.i(TAG, "Starting async streaming generation...")
         
         moduleScope.launch {
             try {
@@ -216,20 +216,20 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     llmSession!!.addQueryChunk(prompt)
                     
                     llmSession!!.generateResponseAsync { partialResult, done ->
-                        Log.d(TAG, "Isolated result: done=$done, length=${partialResult.length}")
+                        Log.d(TAG, "Streaming result: done=$done, length=${partialResult.length}")
                         
                         val params = Arguments.createMap().apply {
                             putString("text", partialResult)
                             putBoolean("done", done)
                             putBoolean("error", false)
-                            putString("type", "translation")
+                            putString("type", "chat")
                         }
                         sendEvent("llmResponse", params)
                     }
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Isolated async generation failed", e)
+                Log.e(TAG, "Async generation failed", e)
                 
                 // Send structured error response
                 val errorParams = Arguments.createMap().apply {
@@ -246,7 +246,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     
     @ReactMethod
     fun resetSession(promise: Promise) {
-        Log.i(TAG, "🔄 Resetting session for isolated translation...")
+        Log.i(TAG, "🔄 Resetting session for clean context...")
         
         moduleScope.launch {
             try {
@@ -257,13 +257,14 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // Small delay to ensure cleanup
                     delay(100)
                     
-                    // Create fresh session with same options
-                    if (llmInference != null && sessionOptions != null) {
+                    // Create fresh session with default options
+                    if (llmInference != null && baseSessionOptions != null) {
                         llmSession = LlmInferenceSession.createFromOptions(
                             llmInference!!,
-                            sessionOptions!!
+                            baseSessionOptions!!
                         )
-                        Log.i(TAG, "✅ Fresh session created for isolated translation")
+                        
+                        Log.i(TAG, "✅ Fresh session created")
                     } else {
                         throw Exception("Cannot recreate session - missing inference or options")
                     }
@@ -296,7 +297,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             llmInference?.close()
             llmInference = null
             
-            sessionOptions = null
+            baseSessionOptions = null
             
             System.gc()
             
@@ -338,6 +339,7 @@ class GemmaModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
     
+    @Deprecated("This method is deprecated")
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         moduleScope.cancel()

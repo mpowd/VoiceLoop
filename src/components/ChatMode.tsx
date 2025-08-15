@@ -10,11 +10,12 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { Language } from '../types';
+import { Language, ChatSettings } from '../types';
 import { layoutStyles } from '../styles/components';
 import LanguageBar from './LanguageBar';
 import LanguageSelector from './LanguageSelector';
 import MenuModal from './MenuModal';
+import ChatSettingsModal from './ChatSettingsModal';
 import { languages } from '../utils/languages';
 
 interface ChatMessage {
@@ -31,6 +32,8 @@ interface ChatModeProps {
 
   // Chat specific
   isGenerating: boolean;
+  chatSettings: ChatSettings;
+  showChatSettings: boolean;
 
   // TTS
   isTtsInitialized: boolean;
@@ -63,6 +66,10 @@ interface ChatModeProps {
   onSourceSearchChange: (query: string) => void;
   onTargetSearchChange: (query: string) => void;
 
+  // Chat settings actions
+  onChatSettingsChange: (settings: ChatSettings) => void;
+  onShowChatSettings: (show: boolean) => void;
+
   // Chat messages
   messages: ChatMessage[];
 }
@@ -75,6 +82,8 @@ const ChatMode: React.FC<ChatModeProps> = ({
   // Chat
   isGenerating,
   messages,
+  chatSettings,
+  showChatSettings,
 
   // TTS
   isTtsInitialized,
@@ -106,6 +115,10 @@ const ChatMode: React.FC<ChatModeProps> = ({
   onShowTargetSelector,
   onSourceSearchChange,
   onTargetSearchChange,
+
+  // Chat settings actions
+  onChatSettingsChange,
+  onShowChatSettings,
 }) => {
   const [inputText, setInputText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
@@ -152,6 +165,26 @@ const ChatMode: React.FC<ChatModeProps> = ({
           onMenuPress={onMenuToggle}
         />
 
+        {/* Chat Header with Settings */}
+        <View style={chatStyles.chatHeader}>
+          <View style={chatStyles.chatHeaderLeft}>
+            <Text style={chatStyles.chatTitle}>Chat Assistant</Text>
+            {chatSettings.systemPrompt && (
+              <Text style={chatStyles.chatSubtitle} numberOfLines={1}>
+                {chatSettings.systemPrompt.length > 50
+                  ? `${chatSettings.systemPrompt.substring(0, 50)}...`
+                  : chatSettings.systemPrompt}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={chatStyles.settingsButton}
+            onPress={() => onShowChatSettings(true)}
+          >
+            <Text style={chatStyles.settingsButtonText}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Chat Messages Area */}
         <View style={chatStyles.messagesContainer}>
           <ScrollView
@@ -165,9 +198,20 @@ const ChatMode: React.FC<ChatModeProps> = ({
                 <Text style={chatStyles.emptyIcon}>💬</Text>
                 <Text style={chatStyles.emptyTitle}>Start a Conversation</Text>
                 <Text style={chatStyles.emptySubtitle}>
-                  Ask me anything! I'm here to help with questions, creative
-                  writing, analysis, coding, and much more.
+                  {chatSettings.systemPrompt
+                    ? 'Your AI assistant is ready with custom settings!'
+                    : "Ask me anything! I'm here to help with questions, creative writing, analysis, coding, and much more."}
                 </Text>
+                {!chatSettings.systemPrompt && (
+                  <TouchableOpacity
+                    style={chatStyles.setupButton}
+                    onPress={() => onShowChatSettings(true)}
+                  >
+                    <Text style={chatStyles.setupButtonText}>
+                      ⚙️ Setup Assistant
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               messages.map(message => (
@@ -317,6 +361,14 @@ const ChatMode: React.FC<ChatModeProps> = ({
         {/* Menu Modal */}
         <MenuModal visible={showMenu} onClose={onCloseMenu} />
 
+        {/* Chat Settings Modal */}
+        <ChatSettingsModal
+          visible={showChatSettings}
+          settings={chatSettings}
+          onClose={() => onShowChatSettings(false)}
+          onSave={onChatSettingsChange}
+        />
+
         {/* Stop Speaking Button (floating if speaking) */}
         {(isSpeakingInput || isSpeakingOutput) && (
           <TouchableOpacity
@@ -331,11 +383,55 @@ const ChatMode: React.FC<ChatModeProps> = ({
   );
 };
 
-// Chat-specific styles - angepasst an dein Design
+// Chat-specific styles - erweitert um neue Chat Header Styles
 const chatStyles = {
   container: {
     flex: 1,
     backgroundColor: '#0f0f23', // Dein App-Hintergrund
+  },
+  chatHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#16213e',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+  chatHeaderLeft: {
+    flex: 1,
+  },
+  chatTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: '#ffffff',
+  },
+  chatSubtitle: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  settingsButton: {
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    padding: 10,
+    marginLeft: 12,
+  },
+  settingsButtonText: {
+    fontSize: 18,
+  },
+  setupButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 16,
+  },
+  setupButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   messagesContainer: {
     flex: 1,
@@ -350,8 +446,8 @@ const chatStyles = {
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 32,
     minHeight: 300,
   },
@@ -361,25 +457,25 @@ const chatStyles = {
   },
   emptyTitle: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: '#ffffff',
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   emptySubtitle: {
     fontSize: 16,
     color: '#9ca3af',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 24,
   },
   messageContainer: {
     marginBottom: 16,
   },
   userMessage: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
   },
   assistantMessage: {
-    alignItems: 'flex-start',
+    alignItems: 'flex-start' as const,
   },
   messageBubble: {
     maxWidth: '85%',
@@ -406,8 +502,8 @@ const chatStyles = {
     marginHorizontal: 8,
   },
   typingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingVertical: 8,
   },
   typingText: {
@@ -416,8 +512,8 @@ const chatStyles = {
     marginRight: 8,
   },
   typingDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   typingDot: {
     width: 6,
@@ -426,6 +522,15 @@ const chatStyles = {
     backgroundColor: '#9ca3af',
     marginHorizontal: 2,
   },
+  typingDot1: {
+    // Animation can be added here
+  },
+  typingDot2: {
+    // Animation can be added here
+  },
+  typingDot3: {
+    // Animation can be added here
+  },
   inputContainer: {
     backgroundColor: '#16213e', // Konsistent mit deinem Design
     borderTopWidth: 1,
@@ -433,8 +538,8 @@ const chatStyles = {
     padding: 16,
   },
   inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
     gap: 12,
   },
   textInput: {
@@ -446,22 +551,22 @@ const chatStyles = {
     color: '#ffffff',
     fontSize: 16,
     maxHeight: 120,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
     minHeight: 48,
   },
   textInputDisabled: {
     opacity: 0.6,
   },
   actionButtons: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 8,
   },
   actionButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   clearButton: {
     backgroundColor: '#ef4444',
@@ -483,11 +588,11 @@ const chatStyles = {
   characterCount: {
     fontSize: 11,
     color: '#6b7280',
-    textAlign: 'right',
+    textAlign: 'right' as const,
     marginTop: 4,
   },
   floatingStopButton: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: 100,
     left: '50%',
     marginLeft: -40,
@@ -504,7 +609,7 @@ const chatStyles = {
   floatingStopButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
 };
 

@@ -14,6 +14,11 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+// Chat settings interface
+export interface ChatSettings {
+  systemPrompt: string;
+}
+
 // Voice recognition states
 export interface VoiceState {
   isListening: boolean;
@@ -51,6 +56,8 @@ export interface ChatState {
   isChatMode: boolean;
   chatMessages: ChatMessage[];
   isChatGenerating: boolean;
+  chatSettings: ChatSettings;
+  showChatSettings: boolean;
 }
 
 // App main state

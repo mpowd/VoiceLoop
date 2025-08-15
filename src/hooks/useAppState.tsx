@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Language, MirrorState, ChatMessage } from '../types';
+import { Language, MirrorState, ChatMessage, ChatSettings } from '../types';
 import { languages } from '../utils/languages';
 
 interface AppStateHook extends MirrorState {
@@ -17,6 +17,8 @@ interface AppStateHook extends MirrorState {
   // Chat state
   isChatMode: boolean;
   chatMessages: ChatMessage[];
+  chatSettings: ChatSettings;
+  showChatSettings: boolean;
 
   // Actions
   setSourceLanguage: (language: Language) => void;
@@ -37,6 +39,8 @@ interface AppStateHook extends MirrorState {
   updateChatMessage: (id: string, updates: Partial<ChatMessage>) => void;
   clearChatMessages: () => void;
   clearAllTexts: () => void;
+  setChatSettings: (settings: ChatSettings) => void;
+  setShowChatSettings: (show: boolean) => void;
 }
 
 export const useAppState = (): AppStateHook => {
@@ -61,6 +65,10 @@ export const useAppState = (): AppStateHook => {
   // Chat mode state
   const [isChatMode, setIsChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [showChatSettings, setShowChatSettings] = useState(false);
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({
+    systemPrompt: '',
+  });
 
   // Swap languages and their texts
   const swapLanguages = () => {
@@ -156,6 +164,8 @@ export const useAppState = (): AppStateHook => {
     // Chat state
     isChatMode,
     chatMessages,
+    chatSettings,
+    showChatSettings,
 
     // Actions
     setSourceLanguage,
@@ -176,5 +186,7 @@ export const useAppState = (): AppStateHook => {
     updateChatMessage,
     clearChatMessages,
     clearAllTexts,
+    setChatSettings,
+    setShowChatSettings,
   };
 };

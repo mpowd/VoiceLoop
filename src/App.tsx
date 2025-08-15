@@ -1,4 +1,4 @@
-// Updated VoiceLoopApp.tsx - Chat functionality with streaming
+// Updated VoiceLoopApp.tsx - Chat functionality with streaming and settings
 
 import React, { useCallback, useState, useEffect } from 'react';
 import { Vibration, NativeModules, NativeEventEmitter } from 'react-native';
@@ -163,13 +163,17 @@ const VoiceLoopApp: React.FC = () => {
           await GemmaLLM.resetSession();
         }
 
-        // Build conversation context with all previous messages
+        // Build conversation context with all previous messages and system prompt
         const allMessages = [...appState.chatMessages, userMessage];
-        const conversationContext = buildConversationPrompt(allMessages);
+        const conversationContext = buildConversationPrompt(
+          allMessages,
+          appState.chatSettings,
+        );
 
         console.log('📝 Sending conversation context:', {
           messageCount: allMessages.length,
           contextLength: conversationContext.length,
+          hasSystemPrompt: !!appState.chatSettings.systemPrompt,
           lastMessage: message.slice(0, 50),
         });
 
@@ -197,14 +201,21 @@ const VoiceLoopApp: React.FC = () => {
     [isChatGenerating, appState],
   );
 
-  // Helper function to build conversation prompt with context
-  const buildConversationPrompt = (messages: ChatMessage[]): string => {
+  // Helper function to build conversation prompt with context and system prompt
+  const buildConversationPrompt = (
+    messages: ChatMessage[],
+    chatSettings: any,
+  ): string => {
     const conversationLines: string[] = [];
 
-    // Add system prompt for better AI behavior
-    conversationLines.push(
-      'You are a helpful AI assistant. Provide clear, accurate, and helpful responses.',
-    );
+    // Add custom system prompt if available, otherwise use default
+    if (chatSettings.systemPrompt?.trim()) {
+      conversationLines.push(chatSettings.systemPrompt.trim());
+    } else {
+      conversationLines.push(
+        'You are a helpful AI assistant. Provide clear, accurate, and helpful responses.',
+      );
+    }
     conversationLines.push('');
 
     // Add conversation history
@@ -220,9 +231,12 @@ const VoiceLoopApp: React.FC = () => {
     conversationLines.push('Assistant:');
 
     const fullPrompt = conversationLines.join('\n');
-    console.log('🔄 Built conversation prompt:', {
+    console.log('🔄 Built conversation prompt with settings:', {
       lines: conversationLines.length,
       totalLength: fullPrompt.length,
+      hasCustomSystemPrompt: !!chatSettings.systemPrompt?.trim(),
+      temperature: chatSettings.temperature,
+      maxTokens: chatSettings.maxTokens,
       preview: fullPrompt.slice(-200),
     });
 
@@ -309,8 +323,6 @@ const VoiceLoopApp: React.FC = () => {
       subscription.remove();
     };
   }, [appState.isChatMode, currentStreamingMessageId, appState]);
-
-  // ... [Rest of your existing handlers remain the same] ...
 
   // Show loading screen if model is not ready
   if (!gemmaModel.isModelReady) {
@@ -581,9 +593,13 @@ const VoiceLoopApp: React.FC = () => {
         // Chat-specific props
         messages={appState.chatMessages}
         isGenerating={isChatGenerating}
+        chatSettings={appState.chatSettings}
+        showChatSettings={appState.showChatSettings}
         // Chat-specific actions
         onSendMessage={handleSendChatMessage}
         onClearChat={appState.clearChatMessages}
+        onChatSettingsChange={appState.setChatSettings}
+        onShowChatSettings={appState.setShowChatSettings}
       />
     );
   }
