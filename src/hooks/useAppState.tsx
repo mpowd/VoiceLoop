@@ -106,13 +106,19 @@ export const useAppState = (): AppStateHook => {
   const updateChatMessage = (id: string, updates: Partial<ChatMessage>) => {
     console.log('🔄 Updating chat message:', {
       id,
-      updates: Object.keys(updates),
+      contentLength: updates.content?.length,
     });
-    setChatMessages(prev =>
-      prev.map(message =>
-        message.id === id ? { ...message, ...updates } : message,
-      ),
-    );
+    setChatMessages(prev => {
+      const messageIndex = prev.findIndex(msg => msg.id === id);
+      if (messageIndex === -1) {
+        console.warn('⚠️ Message not found for update:', id);
+        return prev;
+      }
+
+      const newMessages = [...prev];
+      newMessages[messageIndex] = { ...newMessages[messageIndex], ...updates };
+      return newMessages;
+    });
   };
 
   // Clear chat messages

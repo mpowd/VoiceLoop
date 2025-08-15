@@ -127,7 +127,7 @@ const VoiceLoopApp: React.FC = () => {
   const voice = useVoiceRecognition(voiceCallbacks);
   const tts = useTextToSpeech();
 
-  // Chat functionality with streaming
+  // Chat functionality with streaming and context
   const handleSendChatMessage = useCallback(
     async (message: string) => {
       if (!message.trim() || isChatGenerating) return;
@@ -163,10 +163,20 @@ const VoiceLoopApp: React.FC = () => {
           await GemmaLLM.resetSession();
         }
 
-        // Start streaming generation using async method
+        // Build conversation context with all previous messages
+        const allMessages = [...appState.chatMessages, userMessage];
+        const conversationContext = buildConversationPrompt(allMessages);
+
+        console.log('📝 Sending conversation context:', {
+          messageCount: allMessages.length,
+          contextLength: conversationContext.length,
+          lastMessage: message.slice(0, 50),
+        });
+
+        // Start streaming generation using async method with full context
         if (GemmaLLM && typeof GemmaLLM.generateResponseAsync === 'function') {
-          console.log('🚀 Starting async streaming generation...');
-          GemmaLLM.generateResponseAsync(message);
+          console.log('🚀 Starting async streaming generation with context...');
+          GemmaLLM.generateResponseAsync(conversationContext);
         } else {
           throw new Error('Streaming functionality not available');
         }
@@ -186,6 +196,38 @@ const VoiceLoopApp: React.FC = () => {
     },
     [isChatGenerating, appState],
   );
+
+  // Helper function to build conversation prompt with context
+  const buildConversationPrompt = (messages: ChatMessage[]): string => {
+    const conversationLines: string[] = [];
+
+    // Add system prompt for better AI behavior
+    conversationLines.push(
+      'You are a helpful AI assistant. Provide clear, accurate, and helpful responses.',
+    );
+    conversationLines.push('');
+
+    // Add conversation history
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        conversationLines.push(`Human: ${msg.content}`);
+      } else if (msg.role === 'assistant' && msg.content.trim()) {
+        conversationLines.push(`Assistant: ${msg.content}`);
+      }
+    }
+
+    // Add prompt for the next response
+    conversationLines.push('Assistant:');
+
+    const fullPrompt = conversationLines.join('\n');
+    console.log('🔄 Built conversation prompt:', {
+      lines: conversationLines.length,
+      totalLength: fullPrompt.length,
+      preview: fullPrompt.slice(-200),
+    });
+
+    return fullPrompt;
+  };
 
   // Listen for streaming chat responses
   useEffect(() => {
@@ -222,38 +264,34 @@ const VoiceLoopApp: React.FC = () => {
         return;
       }
 
-      // Handle streaming text updates
+      // Handle streaming text updates with proper accumulation
       if (data.text) {
-        let newAccumulatedText = '';
+        setAccumulatedText(prevAccumulated => {
+          let newText = '';
 
-        if (data.done) {
-          // Final complete response - use the full text
-          newAccumulatedText = data.text;
-          console.log(
-            '✅ Final complete response received:',
-            newAccumulatedText.slice(-50),
-          );
-        } else {
-          // Partial response - check if it's a delta (new token) or complete text so far
-          if (
-            data.text.length < accumulatedText.length ||
-            !accumulatedText.startsWith(data.text.slice(0, -10))
-          ) {
-            // This looks like a new token/delta, append it
-            newAccumulatedText = accumulatedText + data.text;
-            console.log('📝 Appending new token:', data.text);
+          if (data.done) {
+            // Final complete response - use the full text
+            newText = data.text;
+            console.log('✅ Final complete response received');
           } else {
-            // This looks like complete text so far, use it directly
-            newAccumulatedText = data.text;
-            console.log('📝 Using complete text:', data.text.slice(-20));
+            // Check if this is incremental (token-by-token) or complete text so far
+            if (data.text.startsWith(prevAccumulated)) {
+              // Complete text so far - use it directly
+              newText = data.text;
+              console.log('📝 Complete text update, length:', data.text.length);
+            } else {
+              // New token to append
+              newText = prevAccumulated + data.text;
+              console.log('📝 Appending token:', `"${data.text}"`);
+            }
           }
-        }
 
-        setAccumulatedText(newAccumulatedText);
+          // Update the message immediately with the new text
+          appState.updateChatMessage(currentStreamingMessageId, {
+            content: newText,
+          });
 
-        // Update the streaming message with accumulated content
-        appState.updateChatMessage(currentStreamingMessageId, {
-          content: newAccumulatedText,
+          return newText;
         });
       }
 
@@ -270,12 +308,7 @@ const VoiceLoopApp: React.FC = () => {
       console.log('🔌 Removing streaming listener');
       subscription.remove();
     };
-  }, [
-    appState.isChatMode,
-    currentStreamingMessageId,
-    accumulatedText,
-    appState,
-  ]);
+  }, [appState.isChatMode, currentStreamingMessageId, appState]);
 
   // ... [Rest of your existing handlers remain the same] ...
 
